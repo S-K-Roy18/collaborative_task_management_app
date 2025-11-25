@@ -2,16 +2,33 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const Task = require('../models/Task');
 const Workspace = require('../models/Workspace');
+const ActivityLog = require('../models/ActivityLog');
+const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 const router = express.Router();
 
+// Helper function to emit real-time updates
+const emitTaskUpdate = (io, workspaceId, event, data) => {
+  if (io) {
+    io.to(workspaceId).emit(event, data);
+  }
+};
+
+
 // Get all tasks in a workspace
 router.get('/workspace/:workspaceId', authenticate, async (req, res) => {
   try {
     const { workspaceId } = req.params;
-    const userId = req.user.id;
+
+    if (!req.user || !req.user._id) {
+      console.error('Unauthorized: req.user or req.user._id missing');
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const userId = req.user._id;
+    console.log(`Workspace Get tasks userId: ${userId}, workspaceId: ${workspaceId}`);
 
     // Check if user is member of workspace
     const workspace = await Workspace.findById(workspaceId);
@@ -22,7 +39,14 @@ router.get('/workspace/:workspaceId', authenticate, async (req, res) => {
       });
     }
 
-    if (!workspace.isMember(userId)) {
+    let isMember = false;
+    try {
+      isMember = workspace.isMember(userId);
+    } catch (memErr) {
+      console.error('workspace.isMember threw error:', memErr);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+    if (!isMember) {
       return res.status(403).json({
         success: false,
         message: 'Access denied',
@@ -39,7 +63,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req, res) => {
       tasks,
     });
   } catch (error) {
-    console.error('Get tasks error:', error);
+    console.error('Get tasks error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to get tasks',
@@ -48,10 +72,26 @@ router.get('/workspace/:workspaceId', authenticate, async (req, res) => {
 });
 
 // Create a new task
+
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { title, description, assignees, dueDate, priority, status, subtasks, workspaceId } = req.body;
-    const userId = req.user.id;
+    const {
+      title,
+      description,
+      assignees,
+      dueDate,
+      priority,
+      status,
+      subtasks,
+      tags,
+      workspaceId,
+    } = req.body;
+
+    if (!req.user || !req.user._id) {
+      console.error('Unauthorized: req.user or req.user._id missing');
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+    const userId = req.user._id;
 
     // Check if user is member of workspace
     const workspace = await Workspace.findById(workspaceId);
@@ -77,6 +117,7 @@ router.post('/', authenticate, async (req, res) => {
       priority: priority || 'medium',
       status: status || 'todo',
       subtasks: subtasks || [],
+      tags: tags || [],
       workspace: workspaceId,
       createdBy: userId,
     });
@@ -87,13 +128,49 @@ router.post('/', authenticate, async (req, res) => {
     await task.populate('assignees', 'name email avatar');
     await task.populate('createdBy', 'name email avatar');
 
+    // Activity logging
+    const ActivityLog = require('../models/ActivityLog');
+    const Notification = require('../models/Notification');
+    const activity = new ActivityLog({
+      user: userId,
+      workspace: workspaceId,
+      task: task._id,
+      action: 'created',
+      details: `Task "${task.title}" was created`,
+    });
+    await activity.save();
+
+    // Create notifications for assignees
+    const notifications = task.assignees.map(assigneeId => {
+      return new Notification({
+        user: assigneeId,
+        workspace: workspaceId,
+        task: task._id,
+        type: 'assignment',
+        message: `You have been assigned a new task: "${task.title}"`,
+      });
+    });
+    await Notification.insertMany(notifications);
+
+    // Emit real-time update to workspace and notification event to assignees
+    const io = req.app.get('io');
+    emitTaskUpdate(io, workspaceId, 'taskCreated', {
+      task,
+      userId,
+      workspaceId,
+    });
+
+    notifications.forEach(notification => {
+      io.to(notification.user.toString()).emit('notification', notification);
+    });
+
     res.status(201).json({
       success: true,
       message: 'Task created successfully',
       task,
     });
   } catch (error) {
-    console.error('Create task error:', error);
+    console.error('Create task error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to create task',
@@ -104,8 +181,12 @@ router.post('/', authenticate, async (req, res) => {
 // Get a specific task
 router.get('/:taskId', authenticate, async (req, res) => {
   try {
+    console.log('Get task handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const task = await Task.findById(taskId)
       .populate('assignees', 'name email avatar')
@@ -134,7 +215,7 @@ router.get('/:taskId', authenticate, async (req, res) => {
       task,
     });
   } catch (error) {
-    console.error('Get task error:', error);
+    console.error('Get task error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to get task',
@@ -145,8 +226,12 @@ router.get('/:taskId', authenticate, async (req, res) => {
 // Update a task
 router.put('/:taskId', authenticate, async (req, res) => {
   try {
+    console.log('Update task handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     const updates = req.body;
 
     const task = await Task.findById(taskId);
@@ -179,13 +264,33 @@ router.put('/:taskId', authenticate, async (req, res) => {
     await task.populate('assignees', 'name email avatar');
     await task.populate('createdBy', 'name email avatar');
 
+    // Activity logging
+    const ActivityLog = require('../models/ActivityLog');
+    const activity = new ActivityLog({
+      user: userId,
+      workspace: task.workspace,
+      task: task._id,
+      action: 'updated',
+      details: `Task "${task.title}" was updated`,
+    });
+    await activity.save();
+
+    // Emit real-time update to workspace
+    const io = req.app.get('io');
+    emitTaskUpdate(io, task.workspace.toString(), 'taskUpdated', {
+      task,
+      userId: req.user._id,
+      workspaceId: task.workspace.toString()
+    });
+
+
     res.json({
       success: true,
       message: 'Task updated successfully',
       task,
     });
   } catch (error) {
-    console.error('Update task error:', error);
+    console.error('Update task error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to update task',
@@ -196,8 +301,12 @@ router.put('/:taskId', authenticate, async (req, res) => {
 // Delete a task
 router.delete('/:taskId', authenticate, async (req, res) => {
   try {
+    console.log('Delete task handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const task = await Task.findById(taskId);
     if (!task) {
@@ -216,14 +325,28 @@ router.delete('/:taskId', authenticate, async (req, res) => {
       });
     }
 
+    // Activity logging before deletion
+    const ActivityLog = require('../models/ActivityLog');
+    const activity = new ActivityLog({
+      user: userId,
+      workspace: task.workspace,
+      task: task._id,
+      action: 'deleted',
+      details: `Task "${task.title}" was deleted`,
+    });
+    await activity.save();
+
     await task.deleteOne();
 
-    res.json({
-      success: true,
-      message: 'Task deleted successfully',
+    // Emit real-time update to workspace
+    const io = req.app.get('io');
+    emitTaskUpdate(io, task.workspace.toString(), 'taskDeleted', {
+      taskId,
+      userId: req.user._id,
+      workspaceId: task.workspace.toString()
     });
   } catch (error) {
-    console.error('Delete task error:', error);
+    console.error('Delete task error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete task',
@@ -234,8 +357,12 @@ router.delete('/:taskId', authenticate, async (req, res) => {
 // Upload files for a task
 router.post('/:taskId/upload', authenticate, upload.array('files', 10), async (req, res) => {
   try {
+    console.log('Upload files handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const task = await Task.findById(taskId);
     if (!task) {
@@ -280,7 +407,7 @@ router.post('/:taskId/upload', authenticate, upload.array('files', 10), async (r
       attachments: newAttachments,
     });
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('Upload error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to upload files',
@@ -291,8 +418,12 @@ router.post('/:taskId/upload', authenticate, upload.array('files', 10), async (r
 // Delete an attachment from a task
 router.delete('/:taskId/attachment/:filename', authenticate, async (req, res) => {
   try {
+    console.log('Delete attachment handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId, filename } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const task = await Task.findById(taskId);
     if (!task) {
@@ -336,7 +467,7 @@ router.delete('/:taskId/attachment/:filename', authenticate, async (req, res) =>
       message: 'Attachment deleted successfully',
     });
   } catch (error) {
-    console.error('Delete attachment error:', error);
+    console.error('Delete attachment error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete attachment',
@@ -344,12 +475,15 @@ router.delete('/:taskId/attachment/:filename', authenticate, async (req, res) =>
   }
 });
 
-// Add a comment to a task
 router.post('/:taskId/comments', authenticate, async (req, res) => {
   try {
+    console.log('Add comment handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
     const { taskId } = req.params;
     const { content } = req.body;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     if (!content || content.trim().length === 0) {
       return res.status(400).json({
@@ -387,13 +521,36 @@ router.post('/:taskId/comments', authenticate, async (req, res) => {
     // Populate the comment author
     await task.populate('comments.author', 'name email avatar');
 
+    // Log activity
+    const activity = new ActivityLog({
+      user: userId,
+      workspace: task.workspace,
+      task: task._id,
+      action: 'commented',
+      details: `Comment added on task "${task.title}".`,
+    });
+    await activity.save();
+
+    // TODO: Create notifications for mentions in comment (can parse content for @mentions later)
+
+    // Emit real-time update to workspace
+    const io = req.app.get('io');
+    emitTaskUpdate(io, task.workspace.toString(), 'commentAdded', {
+      taskId,
+      comment: task.comments[task.comments.length - 1],
+      userId: req.user._id,
+      workspaceId: task.workspace.toString()
+    });
+
+
+
     res.status(201).json({
       success: true,
       message: 'Comment added successfully',
       comment: task.comments[task.comments.length - 1],
     });
   } catch (error) {
-    console.error('Add comment error:', error);
+    console.error('Add comment error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to add comment',
@@ -401,13 +558,17 @@ router.post('/:taskId/comments', authenticate, async (req, res) => {
   }
 });
 
-// Delete a comment from a task
 router.delete('/:taskId/comments/:commentId', authenticate, async (req, res) => {
   try {
-    const { taskId, commentId } = req.params;
-    const userId = req.user.id;
+    console.log('Delete comment handler, req.user:', req.user);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing user identification' });
+    }
+    const taskIdParam = req.params.taskId;
+    const commentIdParam = req.params.commentId;
+    const userId = req.user._id;
 
-    const task = await Task.findById(taskId);
+    const task = await Task.findById(taskIdParam);
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -425,7 +586,7 @@ router.delete('/:taskId/comments/:commentId', authenticate, async (req, res) => 
     }
 
     // Find the comment
-    const commentIndex = task.comments.findIndex(comment => comment._id.toString() === commentId);
+    const commentIndex = task.comments.findIndex(comment => comment._id.toString() === commentIdParam);
     if (commentIndex === -1) {
       return res.status(404).json({
         success: false,
@@ -444,12 +605,32 @@ router.delete('/:taskId/comments/:commentId', authenticate, async (req, res) => 
     task.comments.splice(commentIndex, 1);
     await task.save();
 
+    // Log activity
+    const activity = new ActivityLog({
+      user: userId,
+      workspace: task.workspace,
+      task: task._id,
+      action: 'comment deleted',
+      details: `Comment deleted on task "${task.title}".`,
+    });
+    await activity.save();
+
+    // Emit real-time update to workspace
+    const io = req.app.get('io');
+    emitTaskUpdate(io, task.workspace.toString(), 'commentDeleted', {
+      taskId: taskIdParam,
+      commentId: commentIdParam,
+      userId: req.user._id,
+      workspaceId: task.workspace.toString()
+    });
+
+
     res.json({
       success: true,
       message: 'Comment deleted successfully',
     });
   } catch (error) {
-    console.error('Delete comment error:', error);
+    console.error('Delete comment error:', error.stack || error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete comment',

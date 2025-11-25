@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest, { params }: { params: { taskId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const { taskId } = await params;
 
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: { taskId: 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { taskId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const { taskId } = await params;
     const body = await request.json();
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest, { params }: { params: { taskId: 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { taskId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
   try {
     const { taskId } = await params;
 

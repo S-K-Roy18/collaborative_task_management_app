@@ -70,7 +70,7 @@ async function testGetWorkspace(token, workspaceId) {
 }
 
 async function testUpdateWorkspace(token, workspaceId) {
-  const response = await fetch(`${API_BASE}/workspace/${workspaceId}`, {
+  const response = await fetch(`${API_BASE}/workspace/${workspaceId}/settings`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -98,15 +98,11 @@ async function testRegenerateCode(token, workspaceId) {
 }
 
 async function testJoinWorkspace(token, inviteCode) {
-  const response = await fetch(`${API_BASE}/workspace/join`, {
+  const response = await fetch(`${API_BASE}/workspace/join/${inviteCode}`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      inviteCode: inviteCode,
-    }),
   });
   const data = await response.json();
   console.log('Join Workspace Response:', data);
@@ -173,6 +169,7 @@ async function runTests() {
     // Test join with second user
     const token2 = await signupAndGetToken2();
     if (token2) {
+      console.log('Joining workspace with invite code:', inviteCode);
       await testJoinWorkspace(token2, inviteCode); // Use original code
     } else {
       console.error('Failed to get token for user 2');

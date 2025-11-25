@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { workspaceId: string } }
+  { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const { workspaceId } = params;
+    const { workspaceId } = await params;
     const { name, description } = await request.json();
 
     if (!name || name.trim().length === 0) {

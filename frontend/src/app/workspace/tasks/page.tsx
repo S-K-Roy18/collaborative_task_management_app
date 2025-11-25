@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+// Update the import path below if your socketContext file is in a different location
+import { useSocket } from '../../../context/socketContext';
 
 interface Task {
   _id: string;
@@ -21,6 +23,10 @@ interface Task {
     title: string;
     completed: boolean;
   }>;
+  tags: Array<{
+    name: string;
+    color: string;
+  }>;
   createdBy: {
     _id: string;
     name: string;
@@ -33,6 +39,7 @@ export default function TaskListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
+  const { socket } = useSocket();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
@@ -42,6 +49,8 @@ export default function TaskListPage() {
   // Filter and sort state
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<Array<{name: string, color: string}>>([]);
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -69,6 +78,18 @@ export default function TaskListPage() {
 
         if (data.success) {
           setTasks(data.tasks);
+
+          // Extract unique tags and setAvailableTags
+          const tagsMap = new Map<string, string>();
+          data.tasks.forEach((task: Task) => {
+            task.tags.forEach(tag => {
+              if (!tagsMap.has(tag.name)) {
+                tagsMap.set(tag.name, tag.color);
+              }
+            });
+          });
+          const uniqueTags = Array.from(tagsMap.entries()).map(([name, color]) => ({ name, color }));
+          setAvailableTags(uniqueTags);
         } else {
           setError(data.message || 'Failed to load tasks');
         }
@@ -82,6 +103,45 @@ export default function TaskListPage() {
     fetchTasks();
   }, [router, workspaceId]);
 
+  // Socket functionality for real-time updates
+  useEffect(() => {
+    if (socket && workspaceId) {
+      // Join workspace room
+      socket.emit('joinWorkspace', workspaceId);
+
+      // Listen for task events
+      const handleTaskCreated = (data: { task: Task; userId: string; workspaceId: string }) => {
+        setTasks(prevTasks => [data.task, ...prevTasks]);
+      };
+
+      const handleTaskUpdated = (data: { task: Task; userId: string; workspaceId: string }) => {
+        setTasks(prevTasks =>
+          prevTasks.map(task =>
+            task._id === data.task._id ? data.task : task
+          )
+        );
+      };
+
+      const handleTaskDeleted = (data: { taskId: string; userId: string; workspaceId: string }) => {
+        setTasks(prevTasks =>
+          prevTasks.filter(task => task._id !== data.taskId)
+        );
+      };
+
+      socket.on('taskCreated', handleTaskCreated);
+      socket.on('taskUpdated', handleTaskUpdated);
+      socket.on('taskDeleted', handleTaskDeleted);
+
+      // Cleanup function
+      return () => {
+        socket.off('taskCreated', handleTaskCreated);
+        socket.off('taskUpdated', handleTaskUpdated);
+        socket.off('taskDeleted', handleTaskDeleted);
+        socket.emit('leaveWorkspace', workspaceId);
+      };
+    }
+  }, [socket, workspaceId]);
+
   // Filter and sort tasks
   useEffect(() => {
     let filtered = [...tasks];
@@ -93,6 +153,12 @@ export default function TaskListPage() {
 
     if (priorityFilter !== 'all') {
       filtered = filtered.filter(task => task.priority === priorityFilter);
+    }
+
+    if (tagFilter.length > 0) {
+      filtered = filtered.filter(task =>
+        task.tags.some(tag => tagFilter.includes(tag.name))
+      );
     }
 
     // Apply sorting
@@ -133,7 +199,7 @@ export default function TaskListPage() {
     });
 
     setFilteredTasks(filtered);
-  }, [tasks, statusFilter, priorityFilter, sortBy, sortOrder]);
+  }, [tasks, statusFilter, priorityFilter, tagFilter, sortBy, sortOrder]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -473,6 +539,24 @@ export default function TaskListPage() {
                     <p className="text-slate-600 mb-6 line-clamp-3 leading-relaxed">
                       {task.description}
                     </p>
+                  )}
+
+                  {/* Tags */}
+                  {task.tags && task.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {task.tags.map((tag, index) => (
+                        <span
+                          key={index}
+                          className="px-3 py-1 rounded-full text-xs font-semibold text-white shadow-lg transform hover:scale-105 transition-transform duration-200"
+                          style={{
+                            backgroundColor: tag.color,
+                            boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                          }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
                   )}
 
                   {/* Task metadata */}

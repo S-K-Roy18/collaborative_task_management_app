@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request, { params }: { params: { workspaceId: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
     const { workspaceId } = await params;
 
@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: { params: { workspaceId:
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { workspaceId: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
     const { workspaceId } = await params;
 

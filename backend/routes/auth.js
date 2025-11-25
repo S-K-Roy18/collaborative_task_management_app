@@ -61,18 +61,39 @@ async function sendResetEmail(email, token) {
 // Signup route
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, password, role, avatar } = req.body;
+    const { name, email, password } = req.body;
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Name, email and password are required' });
+      return res.status(400).json({ message: 'Name, email, and password are required' });
     }
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(409).json({ message: 'Email already in use' });
+      return res.status(400).json({ message: 'User already exists' });
     }
-    const user = new User({ name, email, password, role, avatar });
+    const user = new User({ name, email, password });
     await user.save();
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: user._id, name, email, role, avatar } });
+    res.status(201).json({ token, user: { id: user._id, name: user.name, email, role: user.role, avatar: user.avatar } });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Signup route
+router.post('/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+    const user = new User({ name, email, password });
+    await user.save();
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, user: { id: user._id, name, email, role: user.role, avatar: user.avatar } });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -145,5 +166,6 @@ router.post('/reset-password', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 module.exports = router;

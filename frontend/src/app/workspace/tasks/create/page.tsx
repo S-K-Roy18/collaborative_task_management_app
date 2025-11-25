@@ -8,6 +8,11 @@ interface Subtask {
   completed: boolean;
 }
 
+interface Tag {
+  name: string;
+  color: string;
+}
+
 interface Member {
   id: string;
   name: string;
@@ -27,6 +32,7 @@ export default function CreateTaskPage() {
     priority: 'medium' as 'low' | 'medium' | 'high',
     status: 'todo' as 'todo' | 'in-progress' | 'done',
     subtasks: [] as Subtask[],
+    tags: [] as Tag[],
   });
 
   const [members, setMembers] = useState<Member[]>([]);
@@ -105,6 +111,26 @@ export default function CreateTaskPage() {
     });
   };
 
+  const addTag = () => {
+    setFormData({
+      ...formData,
+      tags: [...formData.tags, { name: '', color: '#007bff' }],
+    });
+  };
+
+  const updateTag = (index: number, field: keyof Tag, value: string) => {
+    const newTags = [...formData.tags];
+    newTags[index][field] = value;
+    setFormData({ ...formData, tags: newTags });
+  };
+
+  const removeTag = (index: number) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags.filter((_, i) => i !== index),
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -127,6 +153,7 @@ export default function CreateTaskPage() {
           ...formData,
           workspaceId,
           subtasks: formData.subtasks.filter(st => st.title.trim() !== ''),
+          tags: formData.tags.filter(tag => tag.name.trim() !== ''),
         }),
       });
 
@@ -313,6 +340,41 @@ export default function CreateTaskPage() {
               className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
             >
               + Add Subtask
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Tags</label>
+            {formData.tags.map((tag, index) => (
+              <div key={index} className="flex gap-3 mb-3 items-center">
+                <input
+                  type="text"
+                  value={tag.name}
+                  onChange={(e) => updateTag(index, 'name', e.target.value)}
+                  placeholder="Tag name"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-900 transition-all duration-200"
+                />
+                <input
+                  type="color"
+                  value={tag.color}
+                  onChange={(e) => updateTag(index, 'color', e.target.value)}
+                  className="w-12 h-10 p-0 border border-gray-300 rounded-xl shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTag(index)}
+                  className="px-4 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addTag}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
+            >
+              + Add Tag
             </button>
           </div>
 

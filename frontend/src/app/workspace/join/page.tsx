@@ -160,7 +160,7 @@ export default function JoinWorkspacePage() {
 
           <div className="mt-8 text-center">
             <p className="text-gray-600 text-sm">
-              Don't have an invite code?{' '}
+              Don&apos;t have an invite code?{' '}
               <Link
                 href="/workspace/create"
                 className="text-emerald-600 hover:text-emerald-700 font-semibold"
