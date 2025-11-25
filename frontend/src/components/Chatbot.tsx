@@ -81,7 +81,6 @@ const Chatbot: React.FC = () => {
               padding: "10px",
               borderBottom: "1px solid #eee",
               fontWeight: "bold",
-              textAlign: "center",
               position: "relative",
             }}
           >
