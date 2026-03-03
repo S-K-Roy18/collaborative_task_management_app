@@ -20,11 +20,20 @@ interface Workspace {
   inviteCode: string;
 }
 
+interface TaskStats {
+  total: number;
+  todo: number;
+  inProgress: number;
+  done: number;
+  overdue: number;
+}
+
 export default function WorkspaceDashboardPage() {
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId') || undefined;
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [taskStats, setTaskStats] = useState<TaskStats>({ total: 0, todo: 0, inProgress: 0, done: 0, overdue: 0 });
   const [error, setError] = useState('');
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
 
@@ -55,7 +64,34 @@ export default function WorkspaceDashboardPage() {
         setError('An error occurred while fetching workspace');
       }
     };
+
+    const fetchTaskStats = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`/api/task/workspace/${workspaceId}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          const tasks = data.tasks;
+          const now = new Date();
+          const stats: TaskStats = {
+            total: tasks.length,
+            todo: tasks.filter((t: any) => t.status === 'todo').length,
+            inProgress: tasks.filter((t: any) => t.status === 'in-progress').length,
+            done: tasks.filter((t: any) => t.status === 'done').length,
+            overdue: tasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'done').length,
+          };
+          setTaskStats(stats);
+        }
+      } catch (err) {
+        console.error('Failed to fetch task stats:', err);
+      }
+    };
+
     fetchWorkspace();
+    fetchTaskStats();
   }, [workspaceId]);
 
   let copyTimeout: NodeJS.Timeout | null = null;
@@ -174,53 +210,73 @@ export default function WorkspaceDashboardPage() {
                 </svg>
                 Quick Actions
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Link
                   href={`/workspace/tasks?workspaceId=${workspaceId}`}
-                  className="group p-6 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl text-white hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl relative overflow-hidden"
+                  className="group p-4 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl text-white hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
-                  <div className="relative z-10 flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">View Tasks</h3>
-                      <p className="text-white/90">Manage workspace tasks</p>
+                      <h3 className="font-bold">List View</h3>
+                      <p className="text-white/80 text-xs">Task list</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/workspace/tasks/kanban?workspaceId=${workspaceId}`}
+                  className="group p-4 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl text-white hover:from-blue-600 hover:via-indigo-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold">Kanban</h3>
+                      <p className="text-white/80 text-xs">Drag & drop</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/workspace/tasks/calendar?workspaceId=${workspaceId}`}
+                  className="group p-4 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 rounded-2xl text-white hover:from-orange-600 hover:via-red-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold">Calendar</h3>
+                      <p className="text-white/80 text-xs">Due dates</p>
                     </div>
                   </div>
                 </Link>
                 <Link
                   href={`/workspace/tasks/create?workspaceId=${workspaceId}`}
-                  className="group p-6 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 rounded-2xl text-white hover:from-purple-600 hover:via-pink-600 hover:to-rose-600 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl relative overflow-hidden"
+                  className="group p-4 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 rounded-2xl text-white hover:from-purple-600 hover:via-pink-600 hover:to-rose-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
-                  <div className="relative z-10 flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">Create Task</h3>
-                      <p className="text-white/90">Add new task</p>
+                      <h3 className="font-bold">Create</h3>
+                      <p className="text-white/80 text-xs">Add task</p>
                     </div>
-                  </div>
-                </Link>
-              </div>
-              <div className="mt-6 pt-6 border-t border-emerald-200/50">
-                <Link
-                  href="/workspace/join"
-                  className="group p-4 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-2xl text-white hover:from-cyan-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden block text-center"
-                >
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-8 translate-x-8"></div>
-                  <div className="relative z-10 flex items-center justify-center space-x-3">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                    </svg>
-                    <span className="font-semibold">Join Another Workspace</span>
                   </div>
                 </Link>
               </div>
@@ -232,37 +288,42 @@ export default function WorkspaceDashboardPage() {
                 <svg className="w-6 h-6 mr-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                Workspace Overview
+                Task Analytics
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="text-center p-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200/50 hover:shadow-lg transition-shadow">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                    </svg>
-                  </div>
-                  <div className="text-3xl font-bold text-emerald-700 mb-1">{workspace.members.length}</div>
-                  <div className="text-emerald-600 font-medium">Team Members</div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div className="text-center p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-2xl border border-gray-200/50 hover:shadow-lg transition-shadow">
+                  <div className="text-3xl font-bold text-gray-700 mb-1">{taskStats.total}</div>
+                  <div className="text-gray-600 font-medium text-sm">Total</div>
                 </div>
-                <div className="text-center p-6 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl border border-cyan-200/50 hover:shadow-lg transition-shadow">
-                  <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                  </div>
-                  <div className="text-3xl font-bold text-cyan-700 mb-1">0</div>
-                  <div className="text-cyan-600 font-medium">Active Tasks</div>
+                <div className="text-center p-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200/50 hover:shadow-lg transition-shadow">
+                  <div className="text-3xl font-bold text-yellow-700 mb-1">{taskStats.todo}</div>
+                  <div className="text-yellow-600 font-medium text-sm">To Do</div>
                 </div>
-                <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-200/50 hover:shadow-lg transition-shadow">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
-                  </div>
-                  <div className="text-3xl font-bold text-purple-700 mb-1">0</div>
-                  <div className="text-purple-600 font-medium">Completed</div>
+                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200/50 hover:shadow-lg transition-shadow">
+                  <div className="text-3xl font-bold text-blue-700 mb-1">{taskStats.inProgress}</div>
+                  <div className="text-blue-600 font-medium text-sm">In Progress</div>
+                </div>
+                <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-200/50 hover:shadow-lg transition-shadow">
+                  <div className="text-3xl font-bold text-green-700 mb-1">{taskStats.done}</div>
+                  <div className="text-green-600 font-medium text-sm">Done</div>
+                </div>
+                <div className="text-center p-4 bg-gradient-to-br from-red-50 to-pink-50 rounded-2xl border border-red-200/50 hover:shadow-lg transition-shadow">
+                  <div className="text-3xl font-bold text-red-700 mb-1">{taskStats.overdue}</div>
+                  <div className="text-red-600 font-medium text-sm">Overdue</div>
                 </div>
               </div>
+              {/* Progress Bar */}
+              {taskStats.total > 0 && (
+                <div className="mt-6">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="font-medium text-gray-700">Completion Progress</span>
+                    <span className="font-bold text-gray-700">{Math.round((taskStats.done / taskStats.total) * 100)}%</span>
+                  </div>
+                  <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500" style={{ width: `${(taskStats.done / taskStats.total) * 100}%` }}></div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

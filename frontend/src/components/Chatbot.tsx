@@ -79,7 +79,7 @@ const Chatbot: React.FC = () => {
           <div
             style={{
               padding: "10px",
-              borderBottom: "1px solid #eee",
+              borderBottom: "1px solid #e64747ff",
               fontWeight: "bold",
               position: "relative",
             }}
@@ -123,7 +123,7 @@ const Chatbot: React.FC = () => {
                     padding: "6px 10px",
                     borderRadius: "12px",
                     backgroundColor:
-                      msg.sender === "user" ? "#0070f3" : "#f1f0f0",
+                      msg.sender === "user" ? "#0070f3" : "#29d629ff",
                     color: msg.sender === "user" ? "white" : "black",
                   }}
                 >
@@ -132,7 +132,7 @@ const Chatbot: React.FC = () => {
               </div>
             ))}
             {isTyping && (
-              <div style={{ fontStyle: "italic", color: "#666" }}>Typing...</div>
+              <div style={{ fontStyle: "italic", color: "#666666ff" }}>Typing...</div>
             )}
             <div ref={messagesEndRef} />
           </div>

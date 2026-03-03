@@ -2,13 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSocket } from '../../../../context/socketContext';
 
 export const dynamic = 'force-dynamic';
-
-// Minimal useSocket stub to avoid a missing-module/type error during development.
-// Replace this stub with your actual '../../context/socketContext' implementation when available.
-const useSocket = (): { socket: any | null } => ({ socket: null });
-
 
 interface Assignee {
   _id: string;

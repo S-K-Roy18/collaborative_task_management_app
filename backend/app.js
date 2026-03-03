@@ -5,7 +5,12 @@ const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
 
+// Load environment variables
 dotenv.config();
+
+// Import middleware
+const { errorHandler } = require('./middleware/errorHandler');
+const responseFormatter = require('./middleware/responseFormatter');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +24,9 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Apply response formatter middleware
+app.use(responseFormatter);
 
 // Logging middleware to log all requests
 app.use((req, res, next) => {
@@ -79,12 +87,12 @@ app.use('/api/activitylog', activityLogRoutes);
 const notificationsRoutes = require('./routes/notifications');
 app.use('/api/notifications', notificationsRoutes);
 
-const chatbotRoutes = require('./routes/chatbot');
-app.use('/api/chatbot', chatbotRoutes);
-
 app.get('/', (req, res) => {
   res.send('Collaborative Task Management API');
 });
+
+// Apply error handler middleware (must be last)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 

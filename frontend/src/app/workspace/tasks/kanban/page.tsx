@@ -3,13 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-// Lightweight local socket hook stub to avoid needing the missing external module.
-// It returns an object with `socket: null` so existing runtime checks (if (!socket) return;) still work.
-// If you later add a real socket provider, remove this stub and restore the original import.
-export function useSocket() {
-  // typed as any to avoid requiring socket.io types in this file
-  return { socket: null as any };
-}
+import { useSocket } from '../../../../context/socketContext';
 
 
 interface Assignee {
