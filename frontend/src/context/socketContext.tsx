@@ -7,6 +7,7 @@ interface SocketContextType {
   socket: Socket | null;
   joinWorkspace: (workspaceId: string) => void;
   leaveWorkspace: (workspaceId: string) => void;
+  joinUserRoom: (userId: string) => void;
   currentWorkspace: string | null;
   onTaskCreated: ((task: any) => void) | null;
   onTaskUpdated: ((task: any) => void) | null;
@@ -24,6 +25,7 @@ const SocketContext = createContext<SocketContextType>({
   socket: null,
   joinWorkspace: () => {},
   leaveWorkspace: () => {},
+  joinUserRoom: () => {},
   currentWorkspace: null,
   onTaskCreated: null,
   onTaskUpdated: null,
@@ -40,6 +42,7 @@ const SocketContext = createContext<SocketContextType>({
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentWorkspace, setCurrentWorkspace] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [onTaskCreated, setOnTaskCreated] = useState<((task: any) => void) | null>(null);
   const [onTaskUpdated, setOnTaskUpdated] = useState<((task: any) => void) | null>(null);
@@ -52,6 +55,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     socketIo.on('connect', () => {
       console.log('Connected to socket server');
+      // Join user room if user is already logged in
+      const storedUserId = localStorage.getItem('userId');
+      if (storedUserId) {
+        socketIo.emit('joinUserRoom', storedUserId);
+        setCurrentUserId(storedUserId);
+      }
     });
 
     socketIo.on('disconnect', () => {
@@ -83,7 +92,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       socketIo.disconnect();
     };
-  }, [onTaskCreated, onTaskUpdated, onTaskDeleted, onCommentAdded, onCommentDeleted]);
+  }, []);
+
+  // Join user's personal room for notifications
+  const joinUserRoom = useCallback((userId: string) => {
+    if (socket) {
+      socket.emit('joinUserRoom', userId);
+      setCurrentUserId(userId);
+      console.log('Joined user room:', userId);
+    }
+  }, [socket]);
 
   const joinWorkspace = useCallback((workspaceId: string) => {
     if (socket && workspaceId !== currentWorkspace) {
@@ -113,6 +131,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socket,
         joinWorkspace,
         leaveWorkspace,
+        joinUserRoom,
         currentWorkspace,
         onTaskCreated,
         onTaskUpdated,

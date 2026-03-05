@@ -11,6 +11,7 @@ dotenv.config();
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
 const responseFormatter = require('./middleware/responseFormatter');
+const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,7 +24,11 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Limit body size
+
+// Apply rate limiting
+app.use('/api/', apiLimiter);
+app.use('/api/auth', authLimiter);
 
 // Apply response formatter middleware
 app.use(responseFormatter);
@@ -52,6 +57,12 @@ mongoose.connect(mongoUri, {
 // Socket.io connection
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
+
+  // Join user's personal room for notifications
+  socket.on('joinUserRoom', (userId) => {
+    socket.join(`user:${userId}`);
+    console.log(`Client ${socket.id} joined user room: ${userId}`);
+  });
 
   socket.on('joinWorkspace', (workspaceId) => {
     socket.join(workspaceId);
@@ -86,6 +97,9 @@ app.use('/api/activitylog', activityLogRoutes);
 
 const notificationsRoutes = require('./routes/notifications');
 app.use('/api/notifications', notificationsRoutes);
+
+const chatbotRoutes = require('./routes/chatbot');
+app.use('/api/chatbot', chatbotRoutes);
 
 app.get('/', (req, res) => {
   res.send('Collaborative Task Management API');

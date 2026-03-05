@@ -282,7 +282,7 @@ export default function WorkspaceDashboardPage() {
               </div>
             </div>
 
-            {/* Workspace Stats */}
+            {/* Workspace Stats with Charts */}
             <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
                 <svg className="w-6 h-6 mr-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,11 +312,101 @@ export default function WorkspaceDashboardPage() {
                   <div className="text-red-600 font-medium text-sm">Overdue</div>
                 </div>
               </div>
-              {/* Progress Bar */}
+
+              {/* Chart Section */}
               {taskStats.total > 0 && (
-                <div className="mt-6">
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Donut Chart */}
+                  <div className="flex flex-col items-center">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Task Distribution</h3>
+                    <div className="relative w-40 h-40">
+                      <svg viewBox="0 0 42 42" className="w-full h-full">
+                        <circle className="donut-ring" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#e5e7eb" strokeWidth="3"></circle>
+                        {taskStats.todo > 0 && (
+                          <circle className="donut-segment" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#eab308" strokeWidth="3" strokeDasharray={`${(taskStats.todo / taskStats.total) * 100} ${100 - (taskStats.todo / taskStats.total) * 100}`} strokeDashoffset="25"></circle>
+                        )}
+                        {taskStats.inProgress > 0 && (
+                          <circle className="donut-segment" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#3b82f6" strokeWidth="3" strokeDasharray={`${(taskStats.inProgress / taskStats.total) * 100} ${100 - (taskStats.inProgress / taskStats.total) * 100}`} strokeDashoffset={`${25 - (taskStats.todo / taskStats.total) * 100}`}></circle>
+                        )}
+                        {taskStats.done > 0 && (
+                          <circle className="donut-segment" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#22c55e" strokeWidth="3" strokeDasharray={`${(taskStats.done / taskStats.total) * 100} ${100 - (taskStats.done / taskStats.total) * 100}`} strokeDashoffset={`${25 - ((taskStats.todo + taskStats.inProgress) / taskStats.total) * 100}`}></circle>
+                        )}
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-gray-800">{taskStats.total}</div>
+                          <div className="text-xs text-gray-500">Tasks</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3 mt-4 justify-center">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <span className="text-xs text-gray-600">To Do ({taskStats.todo})</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <span className="text-xs text-gray-600">In Progress ({taskStats.inProgress})</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        <span className="text-xs text-gray-600">Done ({taskStats.done})</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bar Chart */}
+                  <div className="flex flex-col items-center">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Progress Overview</h3>
+                    <div className="w-full space-y-3">
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Completed</span>
+                          <span className="font-semibold text-green-600">{Math.round((taskStats.done / taskStats.total) * 100)}%</span>
+                        </div>
+                        <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-500" style={{ width: `${(taskStats.done / taskStats.total) * 100}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">In Progress</span>
+                          <span className="font-semibold text-blue-600">{Math.round((taskStats.inProgress / taskStats.total) * 100)}%</span>
+                        </div>
+                        <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 transition-all duration-500" style={{ width: `${(taskStats.inProgress / taskStats.total) * 100}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">To Do</span>
+                          <span className="font-semibold text-yellow-600">{Math.round((taskStats.todo / taskStats.total) * 100)}%</span>
+                        </div>
+                        <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 transition-all duration-500" style={{ width: `${(taskStats.todo / taskStats.total) * 100}%` }}></div>
+                        </div>
+                      </div>
+                      {taskStats.overdue > 0 && (
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-gray-600">Overdue</span>
+                            <span className="font-semibold text-red-600">{Math.round((taskStats.overdue / taskStats.total) * 100)}%</span>
+                          </div>
+                          <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-red-400 to-pink-500 transition-all duration-500" style={{ width: `${(taskStats.overdue / taskStats.total) * 100}%` }}></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Simple Progress Bar */}
+              {taskStats.total > 0 && (
+                <div className="mt-8">
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium text-gray-700">Completion Progress</span>
+                    <span className="font-medium text-gray-700">Overall Completion Progress</span>
                     <span className="font-bold text-gray-700">{Math.round((taskStats.done / taskStats.total) * 100)}%</span>
                   </div>
                   <div className="h-4 bg-gray-200 rounded-full overflow-hidden">

@@ -22,6 +22,21 @@ import { NotificationsProvider } from "../context/NotificationsContext";
 import NotificationsDropdown from "../components/NotificationsDropdown";
 import Chatbot from "../components/Chatbot";
 
+function Header() {
+  return (
+    <header style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      padding: '10px 20px', 
+      borderBottom: '1px solid #e5e7eb',
+      background: '#ffffff',
+    }}>
+      <NotificationsDropdown />
+    </header>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -34,9 +49,7 @@ export default function RootLayout({
       >
         <SocketProvider>
           <NotificationsProvider>
-            <header style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px', borderBottom: '1px solid #ccc' }}>
-              <NotificationsDropdown />
-            </header>
+            <Header />
             {children}
             <Chatbot />
           </NotificationsProvider>
@@ -45,3 +58,4 @@ export default function RootLayout({
     </html>
   );
 }
+

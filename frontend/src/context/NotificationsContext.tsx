@@ -19,6 +19,7 @@ interface NotificationsContextProps {
   notifications: Notification[];
   unreadCount: number;
   markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -72,10 +73,26 @@ export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const markAllAsRead = async () => {
+    try {
+      const res = await fetch('/api/notifications/read-all', {
+        method: 'PUT',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => ({ ...n, read: true }))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to mark all notifications as read', err);
+    }
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, refresh: fetchNotifications }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, refresh: fetchNotifications }}>
       {children}
     </NotificationsContext.Provider>
   );

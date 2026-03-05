@@ -7,21 +7,18 @@ import { useNotifications } from "../context/NotificationsContext";
 const NotificationsDropdown: React.FC = () => {
   const pathname = usePathname();
 
-  // Pages where notification icon and dropdown should be hidden:
   const noNotificationPages = [
     "/login",
     "/signup",
     "/forgot-password",
     "/",
     "/settings",
-    "/admin", // optional admin config pages
+    "/admin",
   ];
 
   const [open, setOpen] = useState(false);
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
-  // Instead of returning null early which skips hooks,
-  // always render component but conditionally hide via style
   const shouldHideNotifications = noNotificationPages.includes(pathname);
 
   useEffect(() => {
@@ -49,6 +46,7 @@ const NotificationsDropdown: React.FC = () => {
           background: "none",
           border: "none",
           cursor: "pointer",
+          color: "black",
         }}
       >
         <svg
@@ -94,6 +92,22 @@ const NotificationsDropdown: React.FC = () => {
             zIndex: 1000,
           }}
         >
+          {unreadCount > 0 && (
+            <button
+              onClick={() => markAllAsRead()}
+              style={{
+                width: "100%",
+                padding: "8px",
+                backgroundColor: "#007bff",
+                color: "white",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              Mark all as read
+            </button>
+          )}
           {notifications.length === 0 ? (
             <div style={{ padding: 10 }}>No notifications</div>
           ) : (

@@ -31,8 +31,8 @@ export default function Login() {
       });
       const data = await res.json();
       if (res.ok) {
-        // Save token to localStorage or cookie
         localStorage.setItem('token', data.token);
+        localStorage.setItem('userId', data.user.id);
         router.push('/workspace');
       } else {
         setError(data.message || 'Login failed');
@@ -44,7 +44,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Enhanced Animated Background */}
       <div className="absolute inset-0">
       <div
         className="absolute inset-0 bg-cover bg-center filter blur-sm"
@@ -63,17 +62,13 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/20" />
       </div>
 
-      {/* Floating Elements */}
       <div className="absolute top-20 left-20 w-20 h-20 bg-white/10 rounded-full" />
       <div className="absolute top-40 right-32 w-16 h-16 bg-pink-400/20 rounded-full" />
       <div className="absolute bottom-32 left-40 w-24 h-24 bg-blue-400/15 rounded-full" />
-
-      {/* Additional Decorative Elements */}
       <div className="absolute top-16 left-1/4 w-3 h-3 bg-white/40 rounded-full" />
       <div className="absolute top-1/2 right-16 w-2 h-2 bg-white/50 rounded-full" />
       <div className="absolute bottom-20 left-1/2 w-4 h-4 bg-white/30 rounded-full" />
 
-      {/* Main Card with 3D Effect */}
       <div className="relative z-10 perspective-1000">
         <div className="card-3d max-w-md w-full bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl p-10 transform-gpu hover:rotate-y-5 transition-transform duration-700">
           <div className="card-face">
@@ -149,70 +144,18 @@ export default function Login() {
       </div>
 
       <style jsx>{`
-        .perspective-1000 {
-          perspective: 1000px;
-        }
-        .card-3d {
-          transform-style: preserve-3d;
-        }
-        .card-face {
-          backface-visibility: hidden;
-        }
-        @keyframes bgMove {
-          0%, 100% { transform: scale(1.1) rotate(0deg); }
-          50% { transform: scale(1.15) rotate(1deg); }
-        }
-        @keyframes gradientShift {
-          0%, 100% { opacity: 0.8; }
-          50% { opacity: 1; }
-        }
-        @keyframes float1 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-20px) rotate(180deg); }
-        }
-        @keyframes float2 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          33% { transform: translateY(-15px) rotate(120deg); }
-          66% { transform: translateY(10px) rotate(240deg); }
-        }
-        @keyframes bgMove2 {
-          0%, 100% { transform: scale(1.05) rotate(-1deg); }
-          50% { transform: scale(1.1) rotate(0.5deg); }
-        }
-        @keyframes float3 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-25px) rotate(360deg); }
-        }
-        @keyframes float4 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          25% { transform: translateY(-10px) rotate(90deg); }
-          50% { transform: translateY(-5px) rotate(180deg); }
-          75% { transform: translateY(-15px) rotate(270deg); }
-        }
-        @keyframes float5 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-18px) rotate(180deg); }
-        }
-        @keyframes float6 {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          33% { transform: translateY(-12px) rotate(120deg); }
-          66% { transform: translateY(8px) rotate(240deg); }
-        }
-        @keyframes slideInLeft {
-          from { transform: translateX(-50px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-bgMove { animation: bgMove 20s ease-in-out infinite; }
-        .animate-bgMove2 { animation: bgMove2 25s ease-in-out infinite; }
-        .animate-gradientShift { animation: gradientShift 8s ease-in-out infinite; }
-        .animate-float1 { animation: float1 6s ease-in-out infinite; }
-        .animate-float2 { animation: float2 8s ease-in-out infinite; }
-        .animate-float3 { animation: float3 10s ease-in-out infinite; }
-        .animate-float4 { animation: float4 7s ease-in-out infinite; }
-        .animate-float5 { animation: float5 9s ease-in-out infinite; }
-        .animate-float6 { animation: float6 11s ease-in-out infinite; }
+        .perspective-1000 { perspective: 1000px; }
+        .card-3d { transform-style: preserve-3d; }
+        .card-face { backface-visibility: hidden; }
+        @keyframes bgMove { 0%, 100% { transform: scale(1.1) rotate(0deg); } 50% { transform: scale(1.15) rotate(1deg); } }
+        @keyframes gradientShift { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+        @keyframes float1 { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-20px) rotate(180deg); } }
+        @keyframes float2 { 0%, 100% { transform: translateY(0px) rotate(0deg); } 33% { transform: translateY(-15px) rotate(120deg); } 66% { transform: translateY(10px) rotate(240deg); } }
+        @keyframes float3 { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-25px) rotate(360deg); } }
+        @keyframes slideInLeft { from { transform: translateX(-50px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slideInLeft { animation: slideInLeft 0.8s ease-out; }
       `}</style>
     </div>
   );
 }
+

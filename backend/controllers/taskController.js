@@ -122,11 +122,11 @@ exports.createTask = async (req, res, next) => {
       workspaceId,
     });
 
-    // Emit notifications to assignees
+    // Emit notifications to specific users (not workspace room)
     if (io) {
-      notifications.forEach(notification => {
-        io.to(notification.user.toString()).emit('notification', notification);
-      });
+      for (const notification of notifications) {
+        io.to(`user:${notification.user}`).emit('notification', notification);
+      }
     }
 
     res.status(201).json({
@@ -216,6 +216,24 @@ exports.updateTask = async (req, res, next) => {
       details: `Task "${task.title}" was updated`,
     });
     await activity.save();
+
+    // Create notification for status change
+    if (updates.status && updates.status !== task.status) {
+      const statusNotification = new Notification({
+        user: task.createdBy,
+        workspace: task.workspace,
+        task: task._id,
+        type: 'status',
+        message: `Task "${task.title}" status changed to ${updates.status}`,
+      });
+      await statusNotification.save();
+      
+      // Emit status change notification
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${task.createdBy}`).emit('notification', statusNotification);
+      }
+    }
 
     // Emit real-time update
     const io = req.app.get('io');
@@ -330,6 +348,39 @@ exports.addComment = async (req, res, next) => {
       details: `Comment added on task "${task.title}".`,
     });
     await activity.save();
+
+    // Create notifications for task creator and assignees (except the commenter)
+    const notifyUsers = new Set([
+      task.createdBy?.toString(),
+      ...task.assignees.map(a => a.toString())
+    ]);
+    notifyUsers.delete(userId.toString());
+
+    const commentNotifications = [];
+    for (const userIdToNotify of notifyUsers) {
+      if (userIdToNotify) {
+        const commentNotification = new Notification({
+          user: userIdToNotify,
+          workspace: task.workspace,
+          task: task._id,
+          type: 'comment',
+          message: `New comment on task "${task.title}": ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+        });
+        commentNotifications.push(commentNotification);
+      }
+    }
+
+    if (commentNotifications.length > 0) {
+      await Notification.insertMany(commentNotifications);
+      
+      // Emit comment notifications
+      const io = req.app.get('io');
+      if (io) {
+        for (const notification of commentNotifications) {
+          io.to(`user:${notification.user}`).emit('notification', notification);
+        }
+      }
+    }
 
     // Emit real-time update
     const io = req.app.get('io');
