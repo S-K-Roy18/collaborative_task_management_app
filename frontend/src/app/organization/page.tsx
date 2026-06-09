@@ -134,7 +134,7 @@ export default function OrganizationSelectionPage() {
               ) : (
                 <div className="space-y-4">
                   {organizations.map((org) => {
-                    const isOwner = org.owner._id === localStorage.getItem('userId') || org.owner === localStorage.getItem('userId');
+                    const isOwner = org.owner._id === localStorage.getItem('userId');
                     return (
                       <div 
                         key={org._id} 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { useSocket } from '../../../../context/socketContext';
@@ -50,7 +50,7 @@ function getPriorityColor(priority: string): string {
   }
 }
 
-export default function KanbanBoardPage() {
+function KanbanBoardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
@@ -230,5 +230,17 @@ export default function KanbanBoardPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function KanbanBoardPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex justify-center items-center text-xl animate-pulse">
+        Loading Kanban Board...
+      </div>
+    }>
+      <KanbanBoardPage />
+    </Suspense>
   );
 }

@@ -1,46 +1,44 @@
 const request = require('supertest');
-const app = require('../app'); // Assuming your Express app is exported from app.js
+const app = require('../app');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Workspace = require('../models/Workspace');
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+
 let token;
 let userId;
 
 beforeAll(async () => {
-  // Disconnect existing connection if any
-  if (mongoose.connection.readyState === 1) {
-    await mongoose.connection.close();
-  }
-  // Connect to test database
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect('mongodb://localhost:27017/ctm_app_test', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+  // Wait for app.js mongoose connection
+  if (mongoose.connection.readyState === 2) {
+    await new Promise(resolve => mongoose.connection.once('connected', resolve));
   }
 
+  // Clean up before test
+  await User.deleteMany({ email: 'testuser@example.com' });
+  await Workspace.deleteMany({ name: { $in: ['Test Workspace', 'Workspace for Get', 'Workspace to Delete'] } });
 
   // Create a test user
   const user = new User({
     name: 'Test User',
     email: 'testuser@example.com',
-    password: 'hashedpassword', // Assume password is hashed
+    password: 'hashedpassword',
     role: 'user',
   });
   await user.save();
   userId = user._id;
 
-  // Generate JWT token
-  token = jwt.sign({ id: userId }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1h' });
+  // Generate JWT using same secret as auth middleware
+  token = jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
 });
 
 afterAll(async () => {
-  // Clean up database
-  await User.deleteMany({});
-  await Workspace.deleteMany({});
-  await mongoose.connection.close();
+  // Clean up test data
+  await User.deleteMany({ email: 'testuser@example.com' });
+  await Workspace.deleteMany({ owner: userId });
+  // Do NOT close mongoose connection
 });
 
 describe('Workspace API', () => {
@@ -108,6 +106,4 @@ describe('Workspace API', () => {
     const deleted = await Workspace.findById(workspace._id);
     expect(deleted).toBeNull();
   });
-
-  // Additional tests for join, update, regenerate code can be added similarly
 });

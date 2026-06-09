@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSocket } from '../../../context/socketContext';
@@ -50,7 +50,7 @@ interface Message {
 
 const EMOJI_OPTIONS = ['👍', '❤️', '🔥', '😂', '🎉', '😮', '😢', '🙏'];
 
-export default function WorkspaceChatPage() {
+function WorkspaceChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
@@ -887,12 +887,12 @@ export default function WorkspaceChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {members.map(member => {
-              const online = isUserOnline(member.id);
-              if (member.id === currentUserId) return null; // hide self
+              const online = isUserOnline(member._id);
+              if (member._id === currentUserId) return null; // hide self
               return (
                 <div
-                  key={member.id}
-                  onClick={() => handleStartDM(member.id)}
+                  key={member._id}
+                  onClick={() => handleStartDM(member._id)}
                   className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/40 hover:bg-indigo-950/20 border border-slate-800/60 hover:border-indigo-500/30 transition-all cursor-pointer group"
                 >
                   <div className="flex items-center space-x-3">
@@ -982,17 +982,17 @@ export default function WorkspaceChatPage() {
                   </label>
                   <div className="max-h-36 overflow-y-auto space-y-2 border border-slate-800/60 rounded-xl p-3 bg-slate-950">
                     {members
-                      .filter(m => m.id !== currentUserId)
+                      .filter(m => m._id !== currentUserId)
                       .map(member => (
-                        <label key={member.id} className="flex items-center gap-3 text-slate-300 hover:text-white cursor-pointer select-none">
+                        <label key={member._id} className="flex items-center gap-3 text-slate-300 hover:text-white cursor-pointer select-none">
                           <input
                             type="checkbox"
-                            checked={selectedGroupMembers.includes(member.id)}
+                            checked={selectedGroupMembers.includes(member._id)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedGroupMembers(prev => [...prev, member.id]);
+                                setSelectedGroupMembers(prev => [...prev, member._id]);
                               } else {
-                                setSelectedGroupMembers(prev => prev.filter(id => id !== member.id));
+                                setSelectedGroupMembers(prev => prev.filter(id => id !== member._id));
                               }
                             }}
                             className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0"
@@ -1025,5 +1025,17 @@ export default function WorkspaceChatPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function WorkspaceChatPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white text-xl animate-pulse">
+        Loading Chat...
+      </div>
+    }>
+      <WorkspaceChatPage />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSocket } from '../../../../context/socketContext';
 
@@ -56,7 +56,7 @@ function getWeekDay(year: number, month: number, day: number): number {
   return new Date(year, month, day).getDay();
 }
 
-export default function CalendarViewPage() {
+function CalendarViewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
@@ -224,5 +224,17 @@ export default function CalendarViewPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CalendarViewPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex justify-center items-center text-xl animate-pulse">
+        Loading Calendar...
+      </div>
+    }>
+      <CalendarViewPage />
+    </Suspense>
   );
 }

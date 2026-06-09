@@ -46,24 +46,21 @@ const Workspace = require('../models/Workspace');
 const Task = require('../models/Task');
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+
 let token;
 let userId;
 let workspaceId;
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState === 1) {
-    await mongoose.connection.close();
-  }
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect('mongodb://localhost:27017/ctm_app_test', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+  // Wait for app.js mongoose connection
+  if (mongoose.connection.readyState === 2) {
+    await new Promise(resolve => mongoose.connection.once('connected', resolve));
   }
 
   // Clear collections
-  await User.deleteMany({});
-  await Workspace.deleteMany({});
+  await User.deleteMany({ email: 'aiuser@example.com' });
+  await Workspace.deleteMany({ name: 'AI Workspace' });
   await Task.deleteMany({});
 
   // Create test user
@@ -75,7 +72,7 @@ beforeAll(async () => {
   });
   await user.save();
   userId = user._id;
-  token = jwt.sign({ id: userId }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1h' });
+  token = jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
 
   // Create test workspace
   const workspace = new Workspace({
@@ -87,20 +84,20 @@ beforeAll(async () => {
   workspace.generateInviteCode();
   await workspace.save();
   workspaceId = workspace._id;
+
+  // Set mock GEMINI key
+  process.env.GEMINI_API_KEY = 'mock_key';
 });
 
 afterAll(async () => {
-  await User.deleteMany({});
-  await Workspace.deleteMany({});
+  await User.deleteMany({ email: 'aiuser@example.com' });
+  await Workspace.deleteMany({ name: 'AI Workspace' });
   await Task.deleteMany({});
-  await mongoose.connection.close();
+  // Do NOT close mongoose connection
 });
 
 describe('AI chatbot API', () => {
   test('AI Task Breakdown', async () => {
-    // Set mock key so validation doesn't return 503
-    process.env.GEMINI_API_KEY = 'mock_key';
-
     const res = await request(app)
       .post('/api/chatbot/breakdown')
       .set('Authorization', `Bearer ${token}`)

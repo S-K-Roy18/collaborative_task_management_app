@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Determine request Content-Type to handle file uploads vs JSON
     const contentType = request.headers.get('content-type') || '';
     let body: any;
-    let headers: Record<string, string> = {
+    const headers: Record<string, string> = {
       ...(authHeader && { 'Authorization': authHeader }),
     };
 

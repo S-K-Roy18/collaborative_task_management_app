@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-export default function ResetPassword() {
+function ResetPassword() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -178,5 +178,17 @@ export default function ResetPassword() {
         .animate-slideInDown { animation: slideInDown 0.8s ease-out; }
       `}</style>
     </div>
+  );
+}
+
+export default function ResetPasswordWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-900/80 via-yellow-900/70 to-pink-900/80 text-white text-xl animate-pulse">
+        Loading...
+      </div>
+    }>
+      <ResetPassword />
+    </Suspense>
   );
 }

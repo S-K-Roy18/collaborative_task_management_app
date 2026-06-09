@@ -2,11 +2,11 @@
 import NotificationsDropdown from '@/components/NotificationsDropdown';
 
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // This page now redirects to the Kanban board for better UX
-export default function TaskListPage() {
+function TaskListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
@@ -31,6 +31,18 @@ export default function TaskListPage() {
         <p className="text-gray-600 font-medium">Redirecting to Kanban Board...</p>
       </div>
     </div>
+  );
+}
+
+export default function TaskListPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-100 text-gray-600 text-xl animate-pulse">
+        Loading...
+      </div>
+    }>
+      <TaskListPage />
+    </Suspense>
   );
 }
 

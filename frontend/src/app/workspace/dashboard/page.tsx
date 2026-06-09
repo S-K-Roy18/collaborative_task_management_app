@@ -2,7 +2,7 @@
 import NotificationsDropdown from '@/components/NotificationsDropdown';
 
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -49,7 +49,7 @@ interface RiskInsight {
   severity: 'high' | 'medium' | 'low';
 }
 
-export default function WorkspaceDashboardPage() {
+function WorkspaceDashboardPage() {
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId') || undefined;
 
@@ -596,6 +596,8 @@ export default function WorkspaceDashboardPage() {
                   <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500" style={{ width: `${(taskStats.done / taskStats.total) * 100}%` }}></div>
                   </div>
+                </div>
+              )}
             </div>
 
             {/* Projects Section */}
@@ -907,5 +909,19 @@ export default function WorkspaceDashboardPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function WorkspaceDashboardPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center animate-pulse">
+          <p className="text-gray-600 font-medium">Loading Dashboard...</p>
+        </div>
+      </div>
+    }>
+      <WorkspaceDashboardPage />
+    </Suspense>
   );
 }

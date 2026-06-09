@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSocket } from '../../../../context/socketContext';
@@ -60,7 +60,7 @@ interface Task {
   tags?: { name: string; color: string }[];
 }
 
-export default function TaskDetailsPage() {
+function TaskDetailsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const taskId = searchParams.get('taskId');
@@ -502,7 +502,7 @@ export default function TaskDetailsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const styles = {
+    const styles: Record<string, string> = {
       'todo': 'bg-slate-600/50 border border-slate-500/50 text-slate-200',
       'in-progress': 'bg-blue-600/50 border border-blue-500/50 text-blue-200',
       'done': 'bg-emerald-600/50 border border-emerald-500/50 text-emerald-200',
@@ -511,7 +511,7 @@ export default function TaskDetailsPage() {
   };
 
   const getPriorityBadge = (priority: string) => {
-    const styles = {
+    const styles: Record<string, string> = {
       'low': 'bg-green-600/50 border border-green-500/50 text-green-200',
       'medium': 'bg-amber-600/50 border border-amber-500/50 text-amber-200',
       'high': 'bg-rose-600/50 border border-rose-500/50 text-rose-200',
@@ -1057,3 +1057,15 @@ const ActivityLogList: React.FC<{ taskId: string }> = ({ taskId }) => {
     </ul>
   );
 };
+
+export default function TaskDetailsPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <div className="text-white text-xl animate-pulse">Loading task details...</div>
+      </div>
+    }>
+      <TaskDetailsPage />
+    </Suspense>
+  );
+}
