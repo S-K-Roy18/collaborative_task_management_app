@@ -564,7 +564,7 @@ function WorkspaceChatPage() {
                   .filter(r => r.type === 'dm')
                   .map(room => {
                     const otherUser = room.members.find(m => m._id !== currentUserId);
-                    if (!otherUser) return null;
+                    if (!otherUser) return <React.Fragment key={room._id} />;
                     const online = isUserOnline(otherUser._id);
                     return (
                       <button
@@ -690,8 +690,9 @@ function WorkspaceChatPage() {
                                   const attachmentUrl = att.path.startsWith('http://') || att.path.startsWith('https://')
                                     ? att.path
                                     : `${process.env.NEXT_PUBLIC_BACKEND_URL || ''}${att.path}`;
+                                  const attKey = att.filename || `att-${i}`;
                                   return isImg ? (
-                                    <div key={i} className="rounded-lg overflow-hidden border border-slate-700 max-w-xs shadow">
+                                    <div key={attKey} className="rounded-lg overflow-hidden border border-slate-700 max-w-xs shadow">
                                       <img
                                         src={attachmentUrl}
                                         alt={att.originalName}
@@ -701,7 +702,7 @@ function WorkspaceChatPage() {
                                     </div>
                                   ) : (
                                     <a
-                                      key={i}
+                                      key={attKey}
                                       href={attachmentUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
@@ -888,7 +889,7 @@ function WorkspaceChatPage() {
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {members.map(member => {
               const online = isUserOnline(member._id);
-              if (member._id === currentUserId) return null; // hide self
+              if (member._id === currentUserId) return <React.Fragment key={member._id} />; // hide self
               return (
                 <div
                   key={member._id}
