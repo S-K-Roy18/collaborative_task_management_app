@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/workspace/join/${inviteCode}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/api/workspace/join/${inviteCode}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
