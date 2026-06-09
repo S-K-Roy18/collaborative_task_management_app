@@ -204,12 +204,14 @@ function WorkspaceDashboardPage() {
         setNewProjectBudget(0);
         setShowCreateProject(false);
       } else {
-        alert(data.message || 'Failed to create project');
+        alert(data.message || data.error?.message || 'Failed to create project');
       }
-    } catch (err) {
-      alert('An error occurred while creating project');
+    } catch (err: any) {
+      console.error('Create project error:', err);
+      alert(err?.message || 'An error occurred while creating project');
     }
   };
+
 
   const handleDuplicateProject = async (projectId: string) => {
     try {
