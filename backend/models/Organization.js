@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const workspaceSchema = new mongoose.Schema({
+const organizationSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
@@ -17,10 +17,6 @@ const workspaceSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  organization: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Organization',
-  },
   members: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -29,8 +25,8 @@ const workspaceSchema = new mongoose.Schema({
     },
     role: {
       type: String,
-      enum: ['admin', 'member', 'viewer'],
-      default: 'member',
+      enum: ['Super Admin', 'Admin', 'Project Manager', 'Team Lead', 'Developer', 'Tester', 'Guest'],
+      default: 'Developer',
     },
     joinedAt: {
       type: Date,
@@ -40,37 +36,27 @@ const workspaceSchema = new mongoose.Schema({
   inviteCode: {
     type: String,
     unique: true,
-    sparse: true, // Allow null values but ensure uniqueness when present
-  },
-  settings: {
-    isPublic: {
-      type: Boolean,
-      default: false,
-    },
-    allowInvites: {
-      type: Boolean,
-      default: true,
-    },
+    sparse: true,
   },
 }, {
   timestamps: true,
 });
 
 // Generate unique invite code
-workspaceSchema.methods.generateInviteCode = function() {
+organizationSchema.methods.generateInviteCode = function() {
   this.inviteCode = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
-// Check if user is member of workspace
-workspaceSchema.methods.isMember = function(userId) {
+// Check if user is member of organization
+organizationSchema.methods.isMember = function(userId) {
   return this.members.some(member => {
     const memberUserId = member.user._id || member.user;
     return memberUserId.toString() === userId.toString();
   });
 };
 
-// Get user's role in workspace
-workspaceSchema.methods.getUserRole = function(userId) {
+// Get user's role in organization
+organizationSchema.methods.getUserRole = function(userId) {
   const member = this.members.find(member => {
     const memberUserId = member.user._id || member.user;
     return memberUserId.toString() === userId.toString();
@@ -78,13 +64,22 @@ workspaceSchema.methods.getUserRole = function(userId) {
   return member ? member.role : null;
 };
 
-// Check if user has permission for action
-workspaceSchema.methods.hasPermission = function(userId, requiredRole) {
+// Check if user has permission for action based on role hierarchy
+organizationSchema.methods.hasPermission = function(userId, requiredRole) {
   const userRole = this.getUserRole(userId);
   if (!userRole) return false;
 
-  const roleHierarchy = { viewer: 1, member: 2, admin: 3 };
+  const roleHierarchy = {
+    'Guest': 1,
+    'Tester': 2,
+    'Developer': 3,
+    'Team Lead': 4,
+    'Project Manager': 5,
+    'Admin': 6,
+    'Super Admin': 7
+  };
+
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole];
 };
 
-module.exports = mongoose.model('Workspace', workspaceSchema);
+module.exports = mongoose.model('Organization', organizationSchema);

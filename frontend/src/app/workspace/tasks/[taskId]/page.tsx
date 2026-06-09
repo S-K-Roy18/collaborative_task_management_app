@@ -73,6 +73,7 @@ export default function TaskDetailsPage() {
   const [error, setError] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [generatingSubtasks, setGeneratingSubtasks] = useState(false);
 
   const [newComment, setNewComment] = useState('');
   const [addingComment, setAddingComment] = useState(false);
@@ -377,6 +378,36 @@ export default function TaskDetailsPage() {
     }
   };
 
+  const handleToggleSubtask = async (index: number) => {
+    if (!task) return;
+    const updatedSubtasks = task.subtasks.map((st, i) =>
+      i === index ? { ...st, completed: !st.completed } : st
+    );
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`/api/task/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ subtasks: updatedSubtasks }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setTask(data.task);
+      } else {
+        alert(data.message || 'Failed to update subtask');
+      }
+    } catch (error) {
+      alert('An error occurred while updating subtask');
+    }
+  };
+
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setUpdatingTask(true);
@@ -412,94 +443,560 @@ export default function TaskDetailsPage() {
     }
   };
 
+  const handleGenerateAISubtasks = async () => {
+    if (!task) return;
+    setGeneratingSubtasks(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const res = await fetch(`/api/chatbot/breakdown`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: task.title,
+          description: task.description,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.subtasks) {
+        const newSubtasks = data.subtasks.map((title: string) => ({
+          title,
+          completed: false,
+        }));
+
+        const mergedSubtasks = [...task.subtasks, ...newSubtasks];
+
+        const updateRes = await fetch(`/api/task/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ subtasks: mergedSubtasks }),
+        });
+
+        const updateData = await updateRes.json();
+        if (updateData.success) {
+          setTask(updateData.task);
+        } else {
+          alert(updateData.message || 'Failed to save generated subtasks');
+        }
+      } else {
+        alert(data.message || 'Failed to generate subtasks with AI');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('An error occurred while generating subtasks');
+    } finally {
+      setGeneratingSubtasks(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles = {
+      'todo': 'bg-slate-600/50 border border-slate-500/50 text-slate-200',
+      'in-progress': 'bg-blue-600/50 border border-blue-500/50 text-blue-200',
+      'done': 'bg-emerald-600/50 border border-emerald-500/50 text-emerald-200',
+    };
+    return styles[status] || styles['todo'];
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const styles = {
+      'low': 'bg-green-600/50 border border-green-500/50 text-green-200',
+      'medium': 'bg-amber-600/50 border border-amber-500/50 text-amber-200',
+      'high': 'bg-rose-600/50 border border-rose-500/50 text-rose-200',
+    };
+    return styles[priority] || styles['medium'];
+  };
+
+  const totalSubtasks = task ? task.subtasks.length : 0;
+  const completedSubtasks = task ? task.subtasks.filter(st => st.completed).length : 0;
+  const progressPercent = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-8">
-      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-3xl p-8">
-        <div className="flex justify-between items-start mb-6">
-          <div className="flex-1">
-            <h1 className="text-4xl font-bold text-white mb-2">{task.title}</h1>
-            <p className="text-indigo-200">{task.description || 'No description provided.'}</p>
-          </div>
-          <button
-            onClick={handleStartEdit}
-            className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-4 py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 ml-4"
-          >
-            Edit Task
-          </button>
-        </div>
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/10 shadow-2xl">
+        
+        {isEditing ? (
+          <form onSubmit={handleUpdateTask} className="space-y-6">
+            <h2 className="text-3xl font-bold text-white mb-6">Edit Task</h2>
 
-        {/* Activity Log Section */}
-        <div className="mb-6 bg-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
-          <h2 className="text-2xl font-semibold text-white mb-4">Activity Log</h2>
-          <ActivityLogList taskId={task._id} />
-        </div>
+            <div>
+              <label className="block text-sm font-semibold text-white mb-2">Task Title</label>
+              <input
+                type="text"
+                required
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
 
-        {/* Tags editing UI */}
-        {isEditing && (
-          <div className="mb-6 bg-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
-            <h2 className="text-2xl font-semibold text-white mb-4">Tags</h2>
-            {editForm.tags.map((tag, index) => (
-              <div key={index} className="flex gap-3 mb-3 items-center">
-                <input
-                  type="text"
-                  value={tag.name}
-                  onChange={(e) => {
-                    const newTags = [...editForm.tags];
-                    newTags[index].name = e.target.value;
-                    setEditForm({ ...editForm, tags: newTags });
-                  }}
-                  placeholder="Tag name"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-900 transition-all duration-200"
-                />
-                <input
-                  type="color"
-                  value={tag.color}
-                  onChange={(e) => {
-                    const newTags = [...editForm.tags];
-                    newTags[index].color = e.target.value;
-                    setEditForm({ ...editForm, tags: newTags });
-                  }}
-                  className="w-12 h-10 p-0 border border-gray-300 rounded-xl shadow-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newTags = editForm.tags.filter((_, i) => i !== index);
-                    setEditForm({ ...editForm, tags: newTags });
-                  }}
-                  className="px-4 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+            <div>
+              <label className="block text-sm font-semibold text-white mb-2">Description</label>
+              <textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={4}
+                className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-white mb-2">Priority</label>
+                <select
+                  value={editForm.priority}
+                  onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as 'low' | 'medium' | 'high' })}
+                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 [&>option]:bg-indigo-950"
                 >
-                  Remove
-                </button>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setEditForm({ ...editForm, tags: [...editForm.tags, { name: '', color: '#007bff' }] })}
-              className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
-            >
-              + Add Tag
-            </button>
+
+              <div>
+                <label className="block text-sm font-semibold text-white mb-2">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as 'todo' | 'in-progress' | 'done' })}
+                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 [&>option]:bg-indigo-950"
+                >
+                  <option value="todo">To Do</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-white mb-2">Due Date</label>
+                <input
+                  type="date"
+                  value={editForm.dueDate}
+                  onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Tags edit block */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4">Tags</h3>
+              <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                {editForm.tags.map((tag, index) => (
+                  <div key={index} className="flex gap-3 items-center">
+                    <input
+                      type="text"
+                      value={tag.name}
+                      onChange={(e) => {
+                        const newTags = [...editForm.tags];
+                        newTags[index].name = e.target.value;
+                        setEditForm({ ...editForm, tags: newTags });
+                      }}
+                      placeholder="Tag name"
+                      className="flex-1 px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      type="color"
+                      value={tag.color}
+                      onChange={(e) => {
+                        const newTags = [...editForm.tags];
+                        newTags[index].color = e.target.value;
+                        setEditForm({ ...editForm, tags: newTags });
+                      }}
+                      className="w-12 h-10 p-0 border border-white/10 rounded-lg bg-transparent cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTags = editForm.tags.filter((_, i) => i !== index);
+                        setEditForm({ ...editForm, tags: newTags });
+                      }}
+                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {editForm.tags.length === 0 && (
+                  <p className="text-indigo-300/40 text-sm">No tags added yet.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditForm({ ...editForm, tags: [...editForm.tags, { name: '', color: '#3b82f6' }] })}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition"
+              >
+                + Add Tag
+              </button>
+            </div>
+
+            {/* Subtasks edit block */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4">Subtasks</h3>
+              <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                {editForm.subtasks.map((subtask, index) => (
+                  <div key={index} className="flex gap-3 items-center">
+                    <input
+                      type="checkbox"
+                      checked={subtask.completed}
+                      onChange={(e) => {
+                        const newSubtasks = [...editForm.subtasks];
+                        newSubtasks[index].completed = e.target.checked;
+                        setEditForm({ ...editForm, subtasks: newSubtasks });
+                      }}
+                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <input
+                      type="text"
+                      value={subtask.title}
+                      onChange={(e) => {
+                        const newSubtasks = [...editForm.subtasks];
+                        newSubtasks[index].title = e.target.value;
+                        setEditForm({ ...editForm, subtasks: newSubtasks });
+                      }}
+                      placeholder="Subtask title"
+                      className="flex-1 px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newSubtasks = editForm.subtasks.filter((_, i) => i !== index);
+                        setEditForm({ ...editForm, subtasks: newSubtasks });
+                      }}
+                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {editForm.subtasks.length === 0 && (
+                  <p className="text-indigo-300/40 text-sm">No subtasks added yet.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditForm({ ...editForm, subtasks: [...editForm.subtasks, { title: '', completed: false }] })}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition"
+              >
+                + Add Subtask
+              </button>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={updatingTask}
+                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold rounded-xl shadow transition"
+              >
+                {updatingTask ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-6">
+            {/* Header info */}
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <h1 className="text-4xl font-bold text-white mb-2">{task.title}</h1>
+                <p className="text-indigo-200 text-lg whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
+              </div>
+              <button
+                onClick={handleStartEdit}
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-5 py-2.5 rounded-xl font-bold hover:from-blue-700 hover:to-cyan-700 transition shadow"
+              >
+                Edit Task
+              </button>
+            </div>
+
+            {/* Badges Grid (Priority, Status, Due date) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider mb-1">Status</span>
+                <span className={`self-start px-3 py-1 rounded-full text-xs font-bold ${getStatusBadge(task.status)}`}>
+                  {task.status.replace('-', ' ').toUpperCase()}
+                </span>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider mb-1">Priority</span>
+                <span className={`self-start px-3 py-1 rounded-full text-xs font-bold ${getPriorityBadge(task.priority)}`}>
+                  {task.priority.toUpperCase()}
+                </span>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+                <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider mb-1">Due Date</span>
+                <span className="text-white font-medium">
+                  {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'}
+                </span>
+              </div>
+            </div>
+
+            {/* Tags section */}
+            {task.tags && task.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {task.tags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3.5 py-1 rounded-full text-xs font-semibold text-white shadow-sm"
+                    style={{ backgroundColor: tag.color || '#3b82f6' }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Assignees */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-3">Assignees</h3>
+              <div className="flex flex-wrap gap-4">
+                {task.assignees && task.assignees.map(assignee => (
+                  <div key={assignee._id} className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-xl px-3 py-1.5">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                      {assignee.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-white text-sm font-semibold">{assignee.name}</div>
+                  </div>
+                ))}
+                {(!task.assignees || task.assignees.length === 0) && (
+                  <p className="text-indigo-300/40 text-sm">No assignees assigned to this task.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Subtasks */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-white">Subtasks</h3>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAISubtasks}
+                    disabled={generatingSubtasks}
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    {generatingSubtasks ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <span>✨</span> Generate with AI
+                      </>
+                    )}
+                  </button>
+                </div>
+                <span className="text-sm text-indigo-200 font-medium">{completedSubtasks}/{totalSubtasks} Completed</span>
+              </div>
+              {totalSubtasks > 0 && (
+                <div className="w-full bg-white/10 rounded-full h-2 mb-4 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${progressPercent}%` }}
+                  ></div>
+                </div>
+              )}
+              <div className="space-y-2.5">
+                {task.subtasks && task.subtasks.map((st, idx) => (
+                  <label key={idx} className="flex items-center gap-3 cursor-pointer group text-white">
+                    <input
+                      type="checkbox"
+                      checked={st.completed}
+                      onChange={() => handleToggleSubtask(idx)}
+                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-indigo-600 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <span className={`transition-all duration-300 ${st.completed ? 'line-through text-indigo-300/40' : 'group-hover:text-indigo-200'}`}>
+                      {st.title}
+                    </span>
+                  </label>
+                ))}
+                {totalSubtasks === 0 && (
+                  <p className="text-indigo-300/40 text-sm">No subtasks defined for this task.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Attachments */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4">Attachments</h3>
+              
+              {/* Upload Form */}
+              <form onSubmit={handleFileUpload} className="mb-6 flex gap-3 items-center">
+                <div className="relative flex-1">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => setSelectedFiles(e.target.files)}
+                    className="block w-full text-sm text-indigo-200 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={uploading || !selectedFiles || selectedFiles.length === 0}
+                  className={`px-5 py-2 rounded-xl text-white font-semibold shadow transition ${
+                    uploading || !selectedFiles || selectedFiles.length === 0
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                  }`}
+                >
+                  {uploading ? 'Uploading...' : 'Upload'}
+                </button>
+              </form>
+
+              {/* Attachments List */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {task.attachments && task.attachments.map((att, idx) => {
+                  const isImg = /jpeg|jpg|png|gif/i.test(att.mimetype);
+                  const attachmentUrl = att.path.startsWith('http://') || att.path.startsWith('https://')
+                    ? att.path
+                    : `${process.env.NEXT_PUBLIC_BACKEND_URL || ''}${att.path}`;
+
+                  return (
+                    <div key={idx} className="flex flex-col bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow">
+                      {isImg ? (
+                        <div className="h-32 w-full overflow-hidden bg-black/25 flex items-center justify-center relative group">
+                          <img
+                            src={attachmentUrl}
+                            alt={att.originalName}
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => window.open(attachmentUrl)}
+                              className="p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg"
+                            >
+                              👁️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(att.filename)}
+                              className="p-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-32 w-full bg-black/25 flex flex-col items-center justify-center p-3 relative group">
+                          <span className="text-4xl mb-2">📎</span>
+                          <span className="text-xs text-center text-white truncate w-full font-medium">{att.originalName}</span>
+                          <span className="text-[10px] text-indigo-300">{Math.round(att.size / 1024)} KB</span>
+                          
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                            <a
+                              href={attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs"
+                            >
+                              ⬇️ Download
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(att.filename)}
+                              className="p-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <div className="p-3 bg-black/10 border-t border-white/5 flex justify-between items-center text-xs text-indigo-200">
+                        <span className="truncate flex-1 pr-2">{att.originalName}</span>
+                        <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {(!task.attachments || task.attachments.length === 0) && (
+                  <div className="col-span-full py-8 text-center text-indigo-300/40 text-sm">
+                    No attachments uploaded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Comments */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4">Comments</h3>
+
+              {/* Add Comment Form */}
+              <form onSubmit={handleAddComment} className="mb-6 flex flex-col gap-3">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Write a comment..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-indigo-300/50 animate-pulse-none"
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={addingComment || !newComment.trim()}
+                    className={`px-6 py-2 rounded-xl text-white font-semibold shadow transition ${
+                      addingComment || !newComment.trim()
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600'
+                    }`}
+                  >
+                    {addingComment ? 'Posting...' : 'Post Comment'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Comments List */}
+              <div className="space-y-4">
+                {task.comments && task.comments.map((comment) => (
+                  <div key={comment._id} className="p-4 bg-white/5 border border-white/5 rounded-xl">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
+                          {comment.author?.name ? comment.author.name.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <span className="text-sm font-semibold text-white">{comment.author?.name || 'Unknown User'}</span>
+                      </div>
+                      <span className="text-xs text-indigo-300">{new Date(comment.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-sm text-indigo-100 pl-10 whitespace-pre-wrap leading-relaxed">{comment.content}</p>
+                  </div>
+                ))}
+                {(!task.comments || task.comments.length === 0) && (
+                  <p className="text-center text-indigo-300/40 text-sm py-4">No comments yet. Start the conversation!</p>
+                )}
+              </div>
+            </div>
+
+            {/* Activity Log Section */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Activity Log</h2>
+              <div className="max-h-64 overflow-y-auto pr-2">
+                <ActivityLogList taskId={task._id} />
+              </div>
+            </div>
           </div>
         )}
-
-        {/* The rest of the component as is: assignees, due date, priority, status, subtasks, attachments, comments, etc. */}
-
-        <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-white mb-2">Assignees</h2>
-          <div className="flex gap-4">
-            {task.assignees.map(assignee => (
-              <div key={assignee._id} className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {assignee.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-white">{assignee.name}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ...Other page contents remain unchanged */}
 
       </div>
     </div>

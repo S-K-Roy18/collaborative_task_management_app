@@ -1,4 +1,6 @@
 'use client';
+import NotificationsDropdown from '@/components/NotificationsDropdown';
+
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -28,14 +30,44 @@ interface TaskStats {
   overdue: number;
 }
 
+interface Project {
+  _id: string;
+  title: string;
+  description: string;
+  status: 'Planning' | 'Active' | 'On Hold' | 'Completed' | 'Cancelled';
+  priority: 'low' | 'medium' | 'high';
+  startDate?: string;
+  endDate?: string;
+  budget: number;
+}
+
+interface RiskInsight {
+  type: 'overload' | 'overdue' | 'deadline' | 'general';
+  title: string;
+  description: string;
+  suggestion: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
 export default function WorkspaceDashboardPage() {
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId') || undefined;
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [taskStats, setTaskStats] = useState<TaskStats>({ total: 0, todo: 0, inProgress: 0, done: 0, overdue: 0 });
+  const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
+  const [risks, setRisks] = useState<RiskInsight[]>([]);
+  const [loadingRisks, setLoadingRisks] = useState(false);
+  const [riskError, setRiskError] = useState('');
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
+
+  // Project creation form state
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newProjectPriority, setNewProjectPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [newProjectBudget, setNewProjectBudget] = useState(0);
 
   useEffect(() => {
     if (!workspaceId) {
@@ -90,9 +122,144 @@ export default function WorkspaceDashboardPage() {
       }
     };
 
+    const fetchProjects = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`/api/project/workspace/${workspaceId}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          setProjects(data.projects);
+        }
+      } catch (err) {
+        console.error('Failed to fetch projects:', err);
+      }
+    };
+
     fetchWorkspace();
     fetchTaskStats();
+    fetchProjects();
+    fetchRisks();
   }, [workspaceId]);
+
+  const fetchRisks = async () => {
+    if (!workspaceId) return;
+    setLoadingRisks(true);
+    setRiskError('');
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch(`/api/chatbot/risks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ workspaceId }),
+      });
+      const data = await res.json();
+      if (data.success && data.risks) {
+        setRisks(data.risks);
+      } else {
+        setRiskError(data.message || 'Failed to fetch AI insights');
+      }
+    } catch (err) {
+      setRiskError('An error occurred while fetching AI insights');
+    } finally {
+      setLoadingRisks(false);
+    }
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectTitle.trim()) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch('/api/project', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: newProjectTitle.trim(),
+          description: newProjectDesc.trim(),
+          workspaceId,
+          priority: newProjectPriority,
+          budget: newProjectBudget,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setProjects([data.project, ...projects]);
+        setNewProjectTitle('');
+        setNewProjectDesc('');
+        setNewProjectPriority('medium');
+        setNewProjectBudget(0);
+        setShowCreateProject(false);
+      } else {
+        alert(data.message || 'Failed to create project');
+      }
+    } catch (err) {
+      alert('An error occurred while creating project');
+    }
+  };
+
+  const handleDuplicateProject = async (projectId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`/api/project/${projectId}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setProjects([data.project, ...projects]);
+        alert('Project duplicated successfully!');
+      } else {
+        alert(data.message || 'Failed to duplicate project');
+      }
+    } catch (err) {
+      alert('An error occurred while duplicating project');
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm('Are you sure you want to delete this project? Tasks associated with this project will be detached but not deleted.')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`/api/project/${projectId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setProjects(projects.filter(p => p._id !== projectId));
+        alert('Project deleted successfully!');
+      } else {
+        alert(data.message || 'Failed to delete project');
+      }
+    } catch (err) {
+      alert('An error occurred while deleting project');
+    }
+  };
 
   let copyTimeout: NodeJS.Timeout | null = null;
 
@@ -210,7 +377,7 @@ export default function WorkspaceDashboardPage() {
                 </svg>
                 Quick Actions
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <Link
                   href={`/workspace/tasks?workspaceId=${workspaceId}`}
                   className="group p-4 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl text-white hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
@@ -276,6 +443,23 @@ export default function WorkspaceDashboardPage() {
                     <div>
                       <h3 className="font-bold">Create</h3>
                       <p className="text-white/80 text-xs">Add task</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/workspace/chat?workspaceId=${workspaceId}`}
+                  className="group p-4 bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-2xl text-white hover:from-teal-600 hover:via-emerald-600 hover:to-green-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold">Chat</h3>
+                      <p className="text-white/80 text-xs">Real-time</p>
                     </div>
                   </div>
                 </Link>
@@ -412,6 +596,215 @@ export default function WorkspaceDashboardPage() {
                   <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500" style={{ width: `${(taskStats.done / taskStats.total) * 100}%` }}></div>
                   </div>
+            </div>
+
+            {/* Projects Section */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8 mt-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <span className="mr-3 text-emerald-600">📁</span>
+                  Project Management
+                </h2>
+                <button
+                  onClick={() => setShowCreateProject(!showCreateProject)}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl font-semibold text-sm shadow transition"
+                >
+                  {showCreateProject ? 'Cancel' : '+ New Project'}
+                </button>
+              </div>
+
+              {/* Create Project Form inline */}
+              {showCreateProject && (
+                <form onSubmit={handleCreateProject} className="mb-6 p-5 bg-gradient-to-r from-emerald-50/50 to-teal-50/50 rounded-2xl border border-emerald-100 space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Project Title</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Website Redesign"
+                      value={newProjectTitle}
+                      onChange={(e) => setNewProjectTitle(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+                    <textarea
+                      placeholder="Brief details about the project..."
+                      value={newProjectDesc}
+                      onChange={(e) => setNewProjectDesc(e.target.value)}
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-gray-900"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Priority</label>
+                      <select
+                        value={newProjectPriority}
+                        onChange={(e) => setNewProjectPriority(e.target.value as 'low' | 'medium' | 'high')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-gray-900"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Budget ($)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newProjectBudget}
+                        onChange={(e) => setNewProjectBudget(Number(e.target.value))}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-gray-900"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold rounded-xl shadow transition"
+                  >
+                    Create Project
+                  </button>
+                </form>
+              )}
+
+              {/* Projects List */}
+              <div className="space-y-4">
+                {projects.map((project) => (
+                  <div key={project._id} className="p-5 bg-gradient-to-r from-gray-50 to-emerald-50 rounded-2xl border border-emerald-100/50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center hover:shadow-md transition">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex flex-wrap gap-2 items-center mb-1">
+                        <h3 className="font-bold text-lg text-gray-900 truncate">{project.title}</h3>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${
+                          project.priority === 'high' ? 'bg-red-500' : project.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}>
+                          {project.priority.toUpperCase()}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">
+                          {project.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 line-clamp-2">{project.description || 'No description provided.'}</p>
+                      <div className="flex gap-4 text-xs text-emerald-700 font-semibold mt-2">
+                        <span>💰 Budget: ${project.budget.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto mt-4 sm:mt-0 justify-end">
+                      <button
+                        onClick={() => handleDuplicateProject(project._id)}
+                        className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg shadow-sm border border-indigo-100 transition"
+                      >
+                        👥 Duplicate
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProject(project._id)}
+                        className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg shadow-sm border border-red-100 transition"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {projects.length === 0 && (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    No projects created in this workspace yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* AI Risks & Insights Section */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8 mt-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <span className="mr-3 text-purple-600">✨</span>
+                  AI Workplace Insights
+                </h2>
+                <button
+                  onClick={fetchRisks}
+                  disabled={loadingRisks}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm shadow transition cursor-pointer flex items-center gap-1.5"
+                >
+                  {loadingRisks ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      🔄 Re-Analyze
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {loadingRisks ? (
+                <div className="space-y-4">
+                  <div className="h-24 bg-gray-100 rounded-2xl animate-pulse"></div>
+                  <div className="h-24 bg-gray-100 rounded-2xl animate-pulse"></div>
+                </div>
+              ) : riskError ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-sm">
+                  <p className="font-semibold mb-1">AI Insights Unavailable</p>
+                  <p>{riskError}</p>
+                </div>
+              ) : risks.length === 0 ? (
+                <div className="text-center py-8 bg-gradient-to-r from-emerald-50/30 to-teal-50/30 rounded-2xl border border-emerald-100/30 text-gray-500 text-sm">
+                  <span className="text-2xl block mb-2">🎉</span>
+                  No critical risks detected. The workspace health is looking great!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {risks.map((risk, index) => {
+                    const severityColors = {
+                      high: 'bg-rose-50 border-rose-200 text-rose-800',
+                      medium: 'bg-amber-50 border-amber-200 text-amber-800',
+                      low: 'bg-blue-50 border-blue-200 text-blue-800',
+                    };
+
+                    const severityBadges = {
+                      high: 'bg-rose-500 text-white',
+                      medium: 'bg-amber-500 text-white',
+                      low: 'bg-blue-500 text-white',
+                    };
+
+                    const riskIcons = {
+                      overload: '⚖️',
+                      overdue: '⏳',
+                      deadline: '⏰',
+                      general: '💡',
+                    };
+
+                    return (
+                      <div
+                        key={index}
+                        className={`p-5 rounded-2xl border shadow-sm flex flex-col justify-between transition hover:shadow-md ${
+                          severityColors[risk.severity] || severityColors.low
+                        }`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xl mr-2">{riskIcons[risk.type] || '💡'}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              severityBadges[risk.severity] || severityBadges.low
+                            }`}>
+                              {risk.severity.toUpperCase()}
+                            </span>
+                          </div>
+                          <h3 className="font-bold text-gray-950 mb-1">{risk.title}</h3>
+                          <p className="text-sm text-gray-700 mb-3">{risk.description}</p>
+                        </div>
+                        {risk.suggestion && (
+                          <div className="mt-2 p-3 bg-white/70 rounded-xl border border-white text-xs text-gray-800 font-medium">
+                            <strong className="text-purple-700 block mb-0.5">💡 Recommendation:</strong>
+                            {risk.suggestion}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

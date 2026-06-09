@@ -1,4 +1,6 @@
 'use client';
+import NotificationsDropdown from '@/components/NotificationsDropdown';
+
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';

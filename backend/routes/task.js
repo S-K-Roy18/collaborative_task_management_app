@@ -3,6 +3,7 @@ const router = express.Router();
 const taskController = require('../controllers/taskController');
 const { authenticate } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { uploadToCloudinary } = require('../middleware/cloudinary');
 
 // @route   GET /api/task/workspace/:workspaceId
 // @desc    Get all tasks in a workspace
@@ -29,9 +30,6 @@ router.put('/:taskId', authenticate, taskController.updateTask);
 // @access  Private
 router.delete('/:taskId', authenticate, taskController.deleteTask);
 
-// @route   POST /api/task/:taskId/upload
-// @desc    Upload files for a task
-// @access  Private
 router.post('/:taskId/upload', authenticate, upload.array('files', 10), async (req, res, next) => {
   // Import here to avoid circular dependency
   const Task = require('../models/Task');
@@ -56,14 +54,19 @@ router.post('/:taskId/upload', authenticate, upload.array('files', 10), async (r
       return next(new AppError('No files uploaded', 400));
     }
 
-    const newAttachments = req.files.map(file => ({
-      filename: file.filename,
-      originalName: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      path: file.path,
-      uploadedAt: new Date(),
-    }));
+    const uploadPromises = req.files.map(async (file) => {
+      const cloudinaryResult = await uploadToCloudinary(file.path);
+      return {
+        filename: file.filename,
+        originalName: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        path: cloudinaryResult.secure_url,
+        uploadedAt: new Date(),
+      };
+    });
+
+    const newAttachments = await Promise.all(uploadPromises);
 
     task.attachments = [...(task.attachments || []), ...newAttachments];
     await task.save();
@@ -95,3 +98,5 @@ router.post('/:taskId/comments', authenticate, taskController.addComment);
 router.delete('/:taskId/comments/:commentId', authenticate, taskController.deleteComment);
 
 module.exports = router;
+
+

@@ -1,5 +1,6 @@
 const Workspace = require('../models/Workspace');
 const User = require('../models/User');
+const Organization = require('../models/Organization');
 const { AppError } = require('../middleware/errorHandler');
 
 // @desc    Create new workspace
@@ -7,11 +8,26 @@ const { AppError } = require('../middleware/errorHandler');
 // @access  Private
 exports.createWorkspace = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, organizationId } = req.body;
     const userId = req.user.id;
 
     if (!name) {
       return next(new AppError('Workspace name is required', 400));
+    }
+
+    let orgRef = undefined;
+    if (organizationId) {
+      const organization = await Organization.findById(organizationId);
+      if (!organization) {
+        return next(new AppError('Organization not found', 404));
+      }
+      if (!organization.isMember(userId)) {
+        return next(new AppError('Access denied: not a member of this organization', 403));
+      }
+      if (!organization.hasPermission(userId, 'Team Lead')) {
+        return next(new AppError('Access denied: Team Lead permissions required to create workspaces', 403));
+      }
+      orgRef = organization._id;
     }
 
     // Create workspace
@@ -19,6 +35,7 @@ exports.createWorkspace = async (req, res, next) => {
       name,
       description,
       owner: userId,
+      organization: orgRef,
       members: [{
         user: userId,
         role: 'admin',

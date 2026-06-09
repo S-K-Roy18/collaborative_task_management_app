@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import VideoCall from '@/components/VideoCall';
+import { useState } from 'react';
 
 export default function Home() {
   return (

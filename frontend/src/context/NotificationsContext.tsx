@@ -1,107 +1,128 @@
-"use client";
+// collaborative_task_management_app/frontend/src/context/NotificationsContext.tsx
+'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useSocket } from './socketContext';
-
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useSession } from 'next-auth/react';
 
 interface Notification {
   _id: string;
   user: string;
-  workspace: string;
-  task?: string;
   type: string;
   message: string;
+  workspace?: string;
+  task?: string;
   read: boolean;
   createdAt: string;
 }
 
-interface NotificationsContextProps {
+interface NotificationsContextType {
   notifications: Notification[];
   unreadCount: number;
-  markAsRead: (id: string) => Promise<void>;
-  markAllAsRead: () => Promise<void>;
-  refresh: () => Promise<void>;
+  markAsRead: (id: string) => void;
+  markAllAsRead: () => void;
+  refreshNotifications: () => Promise<void>;
 }
 
-const NotificationsContext = createContext<NotificationsContextProps | undefined>(undefined);
+const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
-export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const socket = useSocket();
+  const [socket, setSocket] = useState<any>(null);
 
-  const fetchNotifications = async () => {
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Fetch initial notifications
+  const refreshNotifications = async () => {
     try {
-      const res = await fetch('/api/notifications', { credentials: 'include' });
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/notifications', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data.notifications);
+        setNotifications(data.notifications || []);
       }
-    } catch (err) {
-      console.error('Failed to fetch notifications', err);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
     }
   };
 
+  // Setup Socket.io connection
   useEffect(() => {
-    fetchNotifications();
+    if (!session?.user) return;
 
-    if (socket && 'on' in socket) {
-      (socket as any).on('notification', (notification: Notification) => {
-        setNotifications((prev) => [notification, ...prev]);
+    // Dynamically import socket.io-client
+    import('socket.io-client').then((module) => {
+      const io = module.default;
+      const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
+        path: '/socket.io',
+        transports: ['websocket', 'polling'],
       });
-    }
 
-    return () => {
-      if (socket && 'off' in socket) {
-        (socket as any).off('notification');
-      }
-    };
-  }, [socket]);
+      newSocket.on('connect', () => {
+        console.log('Connected to notification server');
+      });
+
+      newSocket.on('notification', (notification: Notification) => {
+        setNotifications(prev => [notification, ...prev]);
+        // Show browser notification if permitted
+        if (Notification.permission === 'granted') {
+          new Notification('New Notification', { body: notification.message });
+        }
+      });
+
+      setSocket(newSocket);
+
+      return () => {
+        newSocket.disconnect();
+      };
+    });
+  }, [session]);
 
   const markAsRead = async (id: string) => {
     try {
-      const res = await fetch(`/api/notifications/${id}/read`, {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/notifications/${id}/read`, {
         method: 'PUT',
-        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        setNotifications((prev) =>
-          prev.map((n) => (n._id === id ? { ...n, read: true } : n))
-        );
-      }
-    } catch (err) {
-      console.error('Failed to mark notification as read', err);
+      setNotifications(prev => 
+        prev.map(n => n._id === id ? { ...n, read: true } : n)
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      const res = await fetch('/api/notifications/read-all', {
+      const token = localStorage.getItem('token');
+      await fetch('/api/notifications/read-all', {
         method: 'PUT',
-        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        setNotifications((prev) =>
-          prev.map((n) => ({ ...n, read: true }))
-        );
-      }
-    } catch (err) {
-      console.error('Failed to mark all notifications as read', err);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Error marking all as read:', error);
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  useEffect(() => {
+    if (session?.user) {
+      refreshNotifications();
+    }
+  }, [session]);
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, refresh: fetchNotifications }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, refreshNotifications }}>
       {children}
     </NotificationsContext.Provider>
   );
-};
+}
 
-export const useNotifications = () => {
+export function useNotifications() {
   const context = useContext(NotificationsContext);
-  if (!context) {
-    throw new Error('useNotifications must be used within NotificationsProvider');
-  }
+  if (!context) throw new Error('useNotifications must be used within NotificationsProvider');
   return context;
-};
+}

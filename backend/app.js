@@ -54,6 +54,10 @@ mongoose.connect(mongoUri, {
 .then(() => console.log('MongoDB connected to:', mongoUri))
 .catch(err => console.log(err));
 
+// Online Presence Tracking structures
+const activeUsers = {}; // workspaceId -> Set of userIds
+const socketUserMap = {}; // socketId -> { userId, workspaceId }
+
 // Socket.io connection
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
@@ -74,8 +78,58 @@ io.on('connection', (socket) => {
     console.log(`Client ${socket.id} left workspace ${workspaceId}`);
   });
 
+  // Chat Socket Events
+  socket.on('joinChatRoom', (roomId) => {
+    socket.join(`room:${roomId}`);
+    console.log(`Client ${socket.id} joined chat room: ${roomId}`);
+  });
+
+  socket.on('leaveChatRoom', (roomId) => {
+    socket.leave(`room:${roomId}`);
+    console.log(`Client ${socket.id} left chat room: ${roomId}`);
+  });
+
+  socket.on('typing', ({ roomId, userName }) => {
+    const userInfo = socketUserMap[socket.id];
+    const userId = userInfo ? userInfo.userId : null;
+    socket.to(`room:${roomId}`).emit('typing', { roomId, userName, userId });
+  });
+
+  socket.on('stopTyping', ({ roomId }) => {
+    const userInfo = socketUserMap[socket.id];
+    const userId = userInfo ? userInfo.userId : null;
+    socket.to(`room:${roomId}`).emit('stopTyping', { roomId, userId });
+  });
+
+  // Track user active presence in a workspace
+  socket.on('userActive', ({ userId, workspaceId }) => {
+    socketUserMap[socket.id] = { userId, workspaceId };
+    
+    if (!activeUsers[workspaceId]) {
+      activeUsers[workspaceId] = new Set();
+    }
+    activeUsers[workspaceId].add(userId);
+
+    // Broadcast the updated online members list to everyone in this workspace
+    io.to(workspaceId).emit('onlineUsers', Array.from(activeUsers[workspaceId]));
+    console.log(`User ${userId} is online in workspace ${workspaceId}`);
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    const userInfo = socketUserMap[socket.id];
+    
+    if (userInfo) {
+      const { userId, workspaceId } = userInfo;
+      delete socketUserMap[socket.id];
+
+      // Remove from active list in that workspace
+      if (activeUsers[workspaceId]) {
+        activeUsers[workspaceId].delete(userId);
+        io.to(workspaceId).emit('onlineUsers', Array.from(activeUsers[workspaceId]));
+        console.log(`User ${userId} went offline in workspace ${workspaceId}`);
+      }
+    }
   });
 });
 
@@ -89,8 +143,14 @@ app.use('/api/auth', authRoutes);
 const workspaceRoutes = require('./routes/workspace');
 app.use('/api/workspace', workspaceRoutes);
 
+const organizationRoutes = require('./routes/organization');
+app.use('/api/organization', organizationRoutes);
+
 const taskRoutes = require('./routes/task');
 app.use('/api/task', taskRoutes);
+
+const projectRoutes = require('./routes/project');
+app.use('/api/project', projectRoutes);
 
 const activityLogRoutes = require('./routes/activityLog');
 app.use('/api/activitylog', activityLogRoutes);
@@ -100,6 +160,9 @@ app.use('/api/notifications', notificationsRoutes);
 
 const chatbotRoutes = require('./routes/chatbot');
 app.use('/api/chatbot', chatbotRoutes);
+
+const chatRoutes = require('./routes/chat');
+app.use('/api/chat', chatRoutes);
 
 app.get('/', (req, res) => {
   res.send('Collaborative Task Management API');
@@ -116,4 +179,8 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-module.exports = { app, server, io };
+app.app = app;
+app.server = server;
+app.io = io;
+
+module.exports = app;

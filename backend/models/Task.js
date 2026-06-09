@@ -38,6 +38,7 @@ const taskSchema = new mongoose.Schema({
   tags: [tagSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true },
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
   createdAt: { type: Date, default: Date.now },
 });
 
