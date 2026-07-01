@@ -29,10 +29,12 @@ export const ChatbotResponseHandler = ({
       }, 25000);
 
       try {
-        const response = await fetch(`${backendUrl}/api/chatbot`, {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`/api/chatbot`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { "Authorization": `Bearer ${token}` })
           },
           body: JSON.stringify({
             messages: [{ role: "user", content: question }],

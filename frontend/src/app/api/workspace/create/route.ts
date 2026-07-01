@@ -3,28 +3,28 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, description } = body;
+    const { name, description, organizationId } = body;
 
     // Get authorization header from the request
     const authHeader = request.headers.get('authorization');
 
     // Call backend API to create workspace
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/create`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspaces`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(authHeader && { 'Authorization': authHeader }),
       },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({ name, description, organization: organizationId }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ error: data.message || 'Failed to create workspace' }, { status: res.status });
+      return NextResponse.json({ success: false, message: data.error || 'Failed to create workspace' }, { status: res.status });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({ success: true, workspace: { id: data.data._id || data.data.id } });
   } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

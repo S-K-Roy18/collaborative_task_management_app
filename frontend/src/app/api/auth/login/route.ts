@@ -9,14 +9,22 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (e) {
+      const text = await res.text().catch(() => '');
+      console.error('Login proxy failed to parse JSON from backend:', text);
+      return NextResponse.json({ message: 'Backend returned invalid response' }, { status: 502 });
+    }
 
     if (!res.ok) {
-      return NextResponse.json({ message: data.message || 'Login failed' }, { status: res.status });
+      return NextResponse.json({ message: data.error || data.message || 'Login failed' }, { status: res.status });
     }
 
     return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ message: 'An error occurred during login' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Login proxy error:', error);
+    return NextResponse.json({ message: error.message || 'An error occurred during login' }, { status: 500 });
   }
 }

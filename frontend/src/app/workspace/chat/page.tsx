@@ -133,7 +133,7 @@ function WorkspaceChatPage() {
         });
         const wsData = await wsRes.json();
         if (wsData.success) {
-          setMembers(wsData.workspace.members);
+          setMembers(wsData.workspace.members.map((m: any) => m.user));
         }
       } catch (err) {
         console.error('Failed to load chat data:', err);
@@ -374,7 +374,7 @@ function WorkspaceChatPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const res = await fetch('/api/chat/room', {
+      const res = await fetch(`/api/chat/workspace/${workspaceId}/rooms`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -382,8 +382,7 @@ function WorkspaceChatPage() {
         },
         body: JSON.stringify({
           type: 'dm',
-          recipientId: memberId,
-          workspaceId,
+          members: [memberId],
         }),
       });
 
@@ -413,11 +412,10 @@ function WorkspaceChatPage() {
       const payload = {
         name: newRoomName.trim(),
         type: newRoomType,
-        workspaceId,
-        members: newRoomType === 'group' ? selectedGroupMembers : [],
+        members: newRoomType === 'group' ? selectedGroupMembers : members.map(m => m._id),
       };
 
-      const res = await fetch('/api/chat/room', {
+      const res = await fetch(`/api/chat/workspace/${workspaceId}/rooms`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

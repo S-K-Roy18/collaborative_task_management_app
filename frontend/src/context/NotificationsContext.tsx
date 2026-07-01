@@ -2,7 +2,6 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useSession } from 'next-auth/react';
 
 interface Notification {
   _id: string;
@@ -26,16 +25,26 @@ interface NotificationsContextType {
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useSession();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [socket, setSocket] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const id = localStorage.getItem('userId');
+      if (id) {
+        setUserId(id);
+      }
+    }
+  }, []);
 
   // Fetch initial notifications
   const refreshNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
       const res = await fetch('/api/notifications', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -50,35 +59,56 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   // Setup Socket.io connection
   useEffect(() => {
-    if (!session?.user) return;
+    if (!userId) return;
 
     // Dynamically import socket.io-client
     import('socket.io-client').then((module) => {
       const io = module.default;
-      const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
+      const newSocket = io(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000', {
         path: '/socket.io',
         transports: ['websocket', 'polling'],
       });
 
+      setSocket(newSocket);
+
       newSocket.on('connect', () => {
-        console.log('Connected to notification server');
+        newSocket.emit('joinUserRoom', userId);
       });
 
-      newSocket.on('notification', (notification: Notification) => {
+      newSocket.on('newNotification', (notification: Notification) => {
         setNotifications(prev => [notification, ...prev]);
-        // Show browser notification if permitted
-        if (Notification.permission === 'granted') {
-          new Notification('New Notification', { body: notification.message });
+        
+        // Use browser Notification API if permitted
+        if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+          new window.Notification('Task Manager Update', {
+            body: notification.message,
+            icon: '/icon.png' // optional icon
+          });
         }
       });
 
-      setSocket(newSocket);
-
       return () => {
+        newSocket.emit('leaveUserRoom', userId);
         newSocket.disconnect();
       };
     });
-  }, [session]);
+  }, [userId]);
+
+  // Initial fetch
+  useEffect(() => {
+    if (userId) {
+      refreshNotifications();
+    }
+  }, [userId]);
+
+  // Ask for browser notification permissions
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (window.Notification.permission === 'default') {
+        window.Notification.requestPermission();
+      }
+    }
+  }, []);
 
   const markAsRead = async (id: string) => {
     try {
@@ -102,20 +132,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setNotifications(prev => 
+        prev.map(n => ({ ...n, read: true }))
+      );
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
   };
 
-  useEffect(() => {
-    if (session?.user) {
-      refreshNotifications();
-    }
-  }, [session]);
-
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, refreshNotifications }}>
+    <NotificationsContext.Provider value={{
+      notifications,
+      unreadCount,
+      markAsRead,
+      markAllAsRead,
+      refreshNotifications
+    }}>
       {children}
     </NotificationsContext.Provider>
   );
@@ -123,6 +155,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
 export function useNotifications() {
   const context = useContext(NotificationsContext);
-  if (!context) throw new Error('useNotifications must be used within NotificationsProvider');
+  if (context === undefined) {
+    throw new Error('useNotifications must be used within a NotificationsProvider');
+  }
   return context;
 }

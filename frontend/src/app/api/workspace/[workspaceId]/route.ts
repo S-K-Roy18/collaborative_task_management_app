@@ -19,17 +19,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ work
     }
 
     // Call backend API to get workspace details
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/${workspaceId}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspaces/${workspaceId}`, {
       method: 'GET',
       headers: {
         ...(authHeader && { 'Authorization': authHeader }),
       },
+      cache: 'no-store',
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ error: data.message || 'Failed to get workspace' }, { status: res.status });
+      return NextResponse.json({ error: data.error || data.message || `Failed to get workspace: ${res.statusText}` }, { status: res.status });
     }
 
     return NextResponse.json(data);
@@ -57,7 +58,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ w
     }
 
     // Call backend API to delete workspace
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/${workspaceId}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspaces/${workspaceId}`, {
       method: 'DELETE',
       headers: {
         ...(authHeader && { 'Authorization': authHeader }),

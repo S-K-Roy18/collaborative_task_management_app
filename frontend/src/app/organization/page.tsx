@@ -23,6 +23,7 @@ interface Organization {
 export default function OrganizationSelectionPage() {
   const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [userName, setUserName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,8 +56,25 @@ export default function OrganizationSelectionPage() {
     }
   };
 
+  const fetchUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch('/api/user/profile', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data && data.name) {
+        setUserName(data.name);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchOrganizations();
+    fetchUser();
   }, []);
 
   const handleJoinOrganization = async (e: React.FormEvent) => {
@@ -112,6 +130,11 @@ export default function OrganizationSelectionPage() {
       <div className="relative z-10 max-w-5xl w-full">
         {/* Header */}
         <div className="text-center mb-12">
+          {userName && (
+            <div className="inline-block px-4 py-1.5 mb-4 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 text-sm font-medium backdrop-blur-md">
+              👋 Welcome back, {userName}!
+            </div>
+          )}
           <h1 className="text-5xl font-extrabold text-white tracking-tight mb-4 drop-shadow-lg">
             Choose Your <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Organization</span>
           </h1>
@@ -143,9 +166,15 @@ export default function OrganizationSelectionPage() {
                         <div className="mb-4 sm:mb-0">
                           <h3 className="text-xl font-bold text-white group-hover:text-indigo-300 transition">{org.name}</h3>
                           <p className="text-sm text-indigo-200/80 line-clamp-2 mt-1">{org.description || 'No description provided'}</p>
-                          <div className="flex gap-4 text-xs text-indigo-300/60 mt-3 font-semibold">
+                          <div className="flex flex-wrap gap-4 text-xs text-indigo-300/60 mt-3 font-semibold items-center">
                             <span>👥 {org.members.length} Members</span>
                             <span>👑 Owner: {org.owner?.name || 'You'}</span>
+                            {org.inviteCode && (
+                              <div className="flex items-center gap-2 bg-indigo-500/20 px-3 py-1 rounded-lg border border-indigo-500/30">
+                                <span className="text-indigo-200">Invite Code:</span>
+                                <span className="text-white tracking-widest font-mono bg-black/30 px-2 py-0.5 rounded select-all">{org.inviteCode}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <Link

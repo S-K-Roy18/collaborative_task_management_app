@@ -29,6 +29,14 @@ A real-time, multi-tenant collaborative project and task management SaaS platfor
 *   **AI Task Breakdown**: Select any task, click **"Generate with AI"**, and Gemini splits the context into a clean, actionable subtask checklist.
 *   **AI Workplace Insights**: Analyzes overall workspace health (detecting overdue deadlines, stuck high-priority items, and team members with overload issues) and generates mitigation suggestions.
 
+### 📊 6. Advanced Analytics & Reporting
+*   **Workspace Dashboards**: Visualize task distributions, priority breakdowns, and 30-day team velocity using responsive Recharts pie and line charts.
+*   **Performance Exporting**: Download live analytics data as CSV reports instantly for external stakeholder updates.
+
+### 🔗 7. Third-Party Integrations (Simulated)
+*   **GitHub Sync**: Simulated OAuth flow to effortlessly import GitHub issues and convert them directly into Kanban tasks.
+*   **Slack Webhooks**: Simulated integrations dashboard to push real-time task notifications into designated Slack `#channels`.
+
 ---
 
 ## 🛠️ Technology Stack

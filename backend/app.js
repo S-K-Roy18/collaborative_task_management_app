@@ -1,186 +1,151 @@
+require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 const http = require('http');
-const socketIo = require('socket.io');
-
-// Load environment variables
-dotenv.config();
-
-// Import middleware
-const { errorHandler } = require('./middleware/errorHandler');
-const responseFormatter = require('./middleware/responseFormatter');
-const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
+const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-  },
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+  }
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Limit body size
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Apply rate limiting
-app.use('/api/', apiLimiter);
-app.use('/api/auth', authLimiter);
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api/', limiter);
 
-// Apply response formatter middleware
-app.use(responseFormatter);
+// Routes
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const organizationRoutes = require('./routes/organizationRoutes');
+const workspaceRoutes = require('./routes/workspaceRoutes');
+const projectRoutes = require('./routes/projectRoutes');
+const milestoneRoutes = require('./routes/milestoneRoutes');
+const taskRoutes = require('./routes/taskRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const sprintRoutes = require('./routes/sprintRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
-// Logging middleware to log all requests
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.originalUrl}`);
-  next();
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/milestones', milestoneRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/sprints', sprintRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/analytics', analyticsRoutes);
+const chatbotRoutes = require('./routes/chatbotRoutes');
+app.use('/api/chatbot', chatbotRoutes);
+const notificationRoutes = require('./routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+const uploadRoutes = require('./routes/uploadRoutes');
+app.use('/api/upload', uploadRoutes);
+
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Basic Route for health check
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'API is running smoothly.' });
 });
 
-// Serve uploaded files statically
-app.use('/uploads', express.static('uploads'));
+// Pass IO to routes via req.app.get('io') if needed, or separate socket module
+app.set('io', io);
 
-// MongoDB connection
-const mongoUri = process.env.NODE_ENV === 'test'
-  ? process.env.MONGO_URI || 'mongodb://localhost:27017/test'
-  : process.env.MONGO_URI || 'mongodb://localhost:27017/ctm_app';
-
-mongoose.connect(mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB connected to:', mongoUri))
-.catch(err => console.log(err));
-
-// Online Presence Tracking structures
-const activeUsers = {}; // workspaceId -> Set of userIds
-const socketUserMap = {}; // socketId -> { userId, workspaceId }
-
-// Socket.io connection
+// Socket.io integration
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-
-  // Join user's personal room for notifications
-  socket.on('joinUserRoom', (userId) => {
-    socket.join(`user:${userId}`);
-    console.log(`Client ${socket.id} joined user room: ${userId}`);
-  });
-
+  console.log('A user connected:', socket.id);
+  
   socket.on('joinWorkspace', (workspaceId) => {
     socket.join(workspaceId);
-    console.log(`Client ${socket.id} joined workspace ${workspaceId}`);
   });
-
   socket.on('leaveWorkspace', (workspaceId) => {
     socket.leave(workspaceId);
-    console.log(`Client ${socket.id} left workspace ${workspaceId}`);
   });
 
-  // Chat Socket Events
+  // User-specific room for notifications
+  socket.on('joinUserRoom', (userId) => {
+    socket.join(`user_${userId}`);
+  });
+  socket.on('leaveUserRoom', (userId) => {
+    socket.leave(`user_${userId}`);
+  });
+
+  // Chat events
   socket.on('joinChatRoom', (roomId) => {
-    socket.join(`room:${roomId}`);
-    console.log(`Client ${socket.id} joined chat room: ${roomId}`);
+    socket.join(roomId);
   });
-
+  
   socket.on('leaveChatRoom', (roomId) => {
-    socket.leave(`room:${roomId}`);
-    console.log(`Client ${socket.id} left chat room: ${roomId}`);
+    socket.leave(roomId);
   });
 
-  socket.on('typing', ({ roomId, userName }) => {
-    const userInfo = socketUserMap[socket.id];
-    const userId = userInfo ? userInfo.userId : null;
-    socket.to(`room:${roomId}`).emit('typing', { roomId, userName, userId });
+  socket.on('typing', ({ roomId, userId, userName }) => {
+    socket.to(roomId).emit('typing', { roomId, userId, userName });
   });
 
-  socket.on('stopTyping', ({ roomId }) => {
-    const userInfo = socketUserMap[socket.id];
-    const userId = userInfo ? userInfo.userId : null;
-    socket.to(`room:${roomId}`).emit('stopTyping', { roomId, userId });
+  socket.on('stopTyping', ({ roomId, userId }) => {
+    socket.to(roomId).emit('stopTyping', { roomId, userId });
   });
 
-  // Track user active presence in a workspace
+  // Basic presence
+  const onlineUsers = new Set();
   socket.on('userActive', ({ userId, workspaceId }) => {
-    socketUserMap[socket.id] = { userId, workspaceId };
-    
-    if (!activeUsers[workspaceId]) {
-      activeUsers[workspaceId] = new Set();
-    }
-    activeUsers[workspaceId].add(userId);
-
-    // Broadcast the updated online members list to everyone in this workspace
-    io.to(workspaceId).emit('onlineUsers', Array.from(activeUsers[workspaceId]));
-    console.log(`User ${userId} is online in workspace ${workspaceId}`);
+    onlineUsers.add(userId);
+    socket.to(workspaceId).emit('onlineUsers', Array.from(onlineUsers));
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    const userInfo = socketUserMap[socket.id];
-    
-    if (userInfo) {
-      const { userId, workspaceId } = userInfo;
-      delete socketUserMap[socket.id];
-
-      // Remove from active list in that workspace
-      if (activeUsers[workspaceId]) {
-        activeUsers[workspaceId].delete(userId);
-        io.to(workspaceId).emit('onlineUsers', Array.from(activeUsers[workspaceId]));
-        console.log(`User ${userId} went offline in workspace ${workspaceId}`);
-      }
-    }
+    console.log('User disconnected:', socket.id);
   });
 });
 
-// Make io available in routes
-app.set('io', io);
-
-// Routes
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
-
-const workspaceRoutes = require('./routes/workspace');
-app.use('/api/workspace', workspaceRoutes);
-
-const organizationRoutes = require('./routes/organization');
-app.use('/api/organization', organizationRoutes);
-
-const taskRoutes = require('./routes/task');
-app.use('/api/task', taskRoutes);
-
-const projectRoutes = require('./routes/project');
-app.use('/api/project', projectRoutes);
-
-const activityLogRoutes = require('./routes/activityLog');
-app.use('/api/activitylog', activityLogRoutes);
-
-const notificationsRoutes = require('./routes/notifications');
-app.use('/api/notifications', notificationsRoutes);
-
-const chatbotRoutes = require('./routes/chatbot');
-app.use('/api/chatbot', chatbotRoutes);
-
-const chatRoutes = require('./routes/chat');
-app.use('/api/chat', chatRoutes);
-
-app.get('/', (req, res) => {
-  res.send('Collaborative Task Management API');
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+  });
 });
-
-// Apply error handler middleware (must be last)
-app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/collaborative-task-manager';
 
-if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+mongoose.connect(MONGO_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch(err => console.error('MongoDB connection error:', err));
 
-app.app = app;
-app.server = server;
-app.io = io;
-
-module.exports = app;
+module.exports = { app, server, io };

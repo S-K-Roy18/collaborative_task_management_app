@@ -18,11 +18,9 @@ interface Assignee {
 }
 
 interface Attachment {
+  _id: string;
   filename: string;
-  originalName: string;
-  mimetype: string;
-  size: number;
-  path: string;
+  url: string;
   uploadedAt: string;
 }
 
@@ -63,7 +61,8 @@ interface Task {
 function TaskDetailsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const taskId = searchParams.get('taskId');
+  const params = require('next/navigation').useParams();
+  const taskId = params.taskId as string || searchParams.get('taskId');
   const workspaceId = searchParams.get('workspaceId');
   const { socket, joinWorkspace, leaveWorkspace } = useSocket();
 
@@ -100,7 +99,7 @@ function TaskDetailsPage() {
       joinWorkspace(workspaceId);
     }
 
-    const fetchTask = async () => {
+    const fetchTaskData = async () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -108,18 +107,22 @@ function TaskDetailsPage() {
           return;
         }
 
-        const res = await fetch(`/api/task/${taskId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+        const [taskRes, commentsRes] = await Promise.all([
+          fetch(`/api/task/${taskId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`/api/comments/task/${taskId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
 
-        const data = await res.json();
+        const taskData = await taskRes.json();
+        const commentsData = await commentsRes.json();
 
-        if (data.success) {
-          setTask(data.task);
+        if (taskData.success) {
+          const taskWithComments = {
+            ...taskData.task,
+            comments: commentsData.success ? commentsData.comments : []
+          };
+          setTask(taskWithComments);
         } else {
-          setError(data.message || 'Failed to load task');
+          setError(taskData.message || 'Failed to load task');
         }
       } catch (err) {
         setError('An error occurred while fetching task');
@@ -128,7 +131,7 @@ function TaskDetailsPage() {
       }
     };
 
-    fetchTask();
+    fetchTaskData();
 
     return () => {
       if (socket) {
@@ -198,37 +201,57 @@ function TaskDetailsPage() {
         return;
       }
 
-      const formData = new FormData();
-      Array.from(selectedFiles).forEach(file => {
-        formData.append('files', file);
-      });
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const formData = new FormData();
+        formData.append('file', file);
 
-      const res = await fetch(`/api/task/${taskId}/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-      const data = await res.json();
-
-      if (data.success) {
-        const taskRes = await fetch(`/api/task/${taskId}`, {
+        // 1. Upload to backend directly
+        const uploadRes = await fetch(`${backendUrl}/api/upload`, {
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          body: formData,
         });
-        const taskData = await taskRes.json();
-        if (taskData.success) {
-          setTask(taskData.task);
+
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) {
+          alert(uploadData.message || `Failed to upload file: ${file.name}`);
+          continue;
         }
-        setSelectedFiles(null);
-        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
-      } else {
-        alert(data.message || 'Failed to upload files');
+
+        // 2. Attach to task
+        const attachRes = await fetch(`${backendUrl}/api/tasks/${taskId}/attachments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            url: uploadData.file.url,
+            filename: uploadData.file.name
+          }),
+        });
+
+        const attachData = await attachRes.json();
+        if (!attachRes.ok) {
+          alert(attachData.error || `Failed to attach file: ${file.name}`);
+        }
       }
+
+      const taskRes = await fetch(`/api/task/${taskId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const taskData = await taskRes.json();
+      if (taskData.success) {
+        setTask(taskData.task);
+      }
+      setSelectedFiles(null);
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
     } catch (error) {
       alert('An error occurred while uploading files');
     } finally {
@@ -236,7 +259,7 @@ function TaskDetailsPage() {
     }
   };
 
-  const handleDeleteAttachment = async (filename: string) => {
+  const handleDeleteAttachment = async (attachmentId: string) => {
     if (!confirm('Are you sure you want to delete this attachment?')) return;
 
     try {
@@ -246,7 +269,7 @@ function TaskDetailsPage() {
         return;
       }
 
-      const res = await fetch(`/api/task/${taskId}/attachment/${filename}`, {
+      const res = await fetch(`/api/task/${taskId}/attachment/${attachmentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -285,7 +308,7 @@ function TaskDetailsPage() {
         return;
       }
 
-      const res = await fetch(`/api/task/${taskId}/comments`, {
+      const res = await fetch(`/api/comments/task/${taskId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -325,7 +348,7 @@ function TaskDetailsPage() {
         priority: task.priority,
         status: task.status,
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
-        subtasks: [...task.subtasks],
+        subtasks: task.subtasks ? [...task.subtasks] : [],
         tags: task.tags ? [...task.tags] : [],
       });
     }
@@ -379,7 +402,8 @@ function TaskDetailsPage() {
   };
 
   const handleToggleSubtask = async (index: number) => {
-    if (!task) return;
+    if (!task || !task.subtasks) return;
+
     const updatedSubtasks = task.subtasks.map((st, i) =>
       i === index ? { ...st, completed: !st.completed } : st
     );
@@ -519,8 +543,8 @@ function TaskDetailsPage() {
     return styles[priority] || styles['medium'];
   };
 
-  const totalSubtasks = task ? task.subtasks.length : 0;
-  const completedSubtasks = task ? task.subtasks.filter(st => st.completed).length : 0;
+  const totalSubtasks = task && task.subtasks ? task.subtasks.length : 0;
+  const completedSubtasks = task && task.subtasks ? task.subtasks.filter(st => st.completed).length : 0;
   const progressPercent = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
   return (
@@ -641,6 +665,29 @@ function TaskDetailsPage() {
                 + Add Tag
               </button>
             </div>
+
+              {/* Time Tracking */}
+              <div>
+                <h3 className="text-sm font-semibold text-indigo-300 uppercase tracking-wider mb-3">Time Tracking</h3>
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-white/5 space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Estimated:</span>
+                    <span className="text-white font-medium">{task.estimatedTime ? `${Math.floor(task.estimatedTime / 60)}h ${task.estimatedTime % 60}m` : 'Not set'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Actual:</span>
+                    <span className="text-indigo-400 font-medium">{task.actualTime ? `${Math.floor(task.actualTime / 60)}h ${task.actualTime % 60}m` : '0h 0m'}</span>
+                  </div>
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full bg-slate-800 rounded-full h-2 mt-2">
+                    <div 
+                      className="bg-indigo-500 h-2 rounded-full" 
+                      style={{ width: task.estimatedTime ? `${Math.min((task.actualTime / task.estimatedTime) * 100, 100)}%` : '0%' }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
 
             {/* Subtasks edit block */}
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
@@ -842,35 +889,63 @@ function TaskDetailsPage() {
               <h3 className="text-xl font-bold text-white mb-4">Attachments</h3>
               
               {/* Upload Form */}
-              <form onSubmit={handleFileUpload} className="mb-6 flex gap-3 items-center">
-                <div className="relative flex-1">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(e) => setSelectedFiles(e.target.files)}
-                    className="block w-full text-sm text-indigo-200 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20"
-                  />
+              <form onSubmit={handleFileUpload} className="mb-6 flex flex-col gap-3">
+                <div className="flex gap-3 items-center w-full">
+                  <div className="relative flex-1">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => setSelectedFiles(e.target.files)}
+                      className="block w-full text-sm text-indigo-200 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={uploading || !selectedFiles || selectedFiles.length === 0}
+                    className={`px-5 py-2 rounded-xl text-white font-semibold shadow transition ${
+                      uploading || !selectedFiles || selectedFiles.length === 0
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                    }`}
+                  >
+                    {uploading ? 'Uploading...' : 'Upload'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={uploading || !selectedFiles || selectedFiles.length === 0}
-                  className={`px-5 py-2 rounded-xl text-white font-semibold shadow transition ${
-                    uploading || !selectedFiles || selectedFiles.length === 0
-                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                  }`}
-                >
-                  {uploading ? 'Uploading...' : 'Upload'}
-                </button>
+                {/* Selected Files Preview */}
+                {selectedFiles && selectedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {Array.from(selectedFiles).map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-indigo-900/50 border border-indigo-500/30 rounded-lg px-3 py-1">
+                        <span className="text-xs text-indigo-200 truncate max-w-[150px]">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const dt = new DataTransfer();
+                            Array.from(selectedFiles).forEach((f, i) => {
+                              if (i !== idx) dt.items.add(f);
+                            });
+                            setSelectedFiles(dt.files.length > 0 ? dt.files : null);
+                            const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                            if (fileInput) fileInput.files = dt.files;
+                          }}
+                          className="text-red-400 hover:text-red-300 ml-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </form>
 
               {/* Attachments List */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {task.attachments && task.attachments.map((att, idx) => {
-                  const isImg = /jpeg|jpg|png|gif/i.test(att.mimetype);
-                  const attachmentUrl = att.path.startsWith('http://') || att.path.startsWith('https://')
-                    ? att.path
-                    : `${process.env.NEXT_PUBLIC_BACKEND_URL || ''}${att.path}`;
+                  const ext = att.filename.split('.').pop()?.toLowerCase();
+                  const isImg = /jpeg|jpg|png|gif|webp|svg/i.test(ext || '');
+                  const attachmentUrl = att.url.startsWith('http://') || att.url.startsWith('https://')
+                    ? att.url
+                    : `${process.env.NEXT_PUBLIC_BACKEND_URL || ''}${att.url}`;
 
                   return (
                     <div key={idx} className="flex flex-col bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow">
@@ -878,7 +953,7 @@ function TaskDetailsPage() {
                         <div className="h-32 w-full overflow-hidden bg-black/25 flex items-center justify-center relative group">
                           <img
                             src={attachmentUrl}
-                            alt={att.originalName}
+                            alt={att.filename}
                             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
@@ -891,7 +966,7 @@ function TaskDetailsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteAttachment(att.filename)}
+                              onClick={() => handleDeleteAttachment(att._id)}
                               className="p-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
                             >
                               🗑️
@@ -901,8 +976,7 @@ function TaskDetailsPage() {
                       ) : (
                         <div className="h-32 w-full bg-black/25 flex flex-col items-center justify-center p-3 relative group">
                           <span className="text-4xl mb-2">📎</span>
-                          <span className="text-xs text-center text-white truncate w-full font-medium">{att.originalName}</span>
-                          <span className="text-[10px] text-indigo-300">{Math.round(att.size / 1024)} KB</span>
+                          <span className="text-xs text-center text-white truncate w-full font-medium">{att.filename}</span>
                           
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
                             <a
@@ -915,7 +989,7 @@ function TaskDetailsPage() {
                             </a>
                             <button
                               type="button"
-                              onClick={() => handleDeleteAttachment(att.filename)}
+                              onClick={() => handleDeleteAttachment(att._id)}
                               className="p-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
                             >
                               🗑️
@@ -924,7 +998,7 @@ function TaskDetailsPage() {
                         </div>
                       )}
                       <div className="p-3 bg-black/10 border-t border-white/5 flex justify-between items-center text-xs text-indigo-200">
-                        <span className="truncate flex-1 pr-2">{att.originalName}</span>
+                        <span className="truncate flex-1 pr-2">{att.filename}</span>
                         <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
                       </div>
                     </div>

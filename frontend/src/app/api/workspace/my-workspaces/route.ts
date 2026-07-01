@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'No token provided' }, { status: 401 });
     }
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/my-workspaces`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspaces/my-workspaces`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

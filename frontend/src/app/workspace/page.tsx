@@ -2,12 +2,13 @@
 import NotificationsDropdown from '@/components/NotificationsDropdown';
 
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface Workspace {
-  id: string;
+  _id: string;
+  id?: string;
   name: string;
   description: string;
   role: string;
@@ -15,8 +16,11 @@ interface Workspace {
   isOwner: boolean;
 }
 
-export default function WorkspaceSelectionPage() {
+function WorkspaceSelectionContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const orgId = searchParams.get('orgId') || '';
+  
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,7 +72,7 @@ async function deleteWorkspace(id: string) {
     });
     const data = await res.json();
     if (data.success) {
-      setWorkspaces(workspaces.filter(ws => ws.id !== id));
+      setWorkspaces(workspaces.filter(ws => (ws._id || ws.id) !== id));
       alert('Workspace deleted successfully.');
     } else {
       alert(data.message || 'Failed to delete workspace.');
@@ -176,7 +180,7 @@ if (loading) {
                 Create your first workspace and start collaborating with your team in a beautiful, organized environment.
               </p>
               <Link
-                href="/workspace/create"
+                href={`/workspace/create${orgId ? '?orgId=' + orgId : ''}`}
                 className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-10 py-5 rounded-2xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-105 text-lg"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,8 +194,8 @@ if (loading) {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
             {workspaces.map((workspace) => (
               <div
-                key={workspace.id}
-                onClick={() => router.push(`/workspace/dashboard?workspaceId=${workspace.id}`)}
+                key={workspace._id || workspace.id}
+                onClick={() => router.push(`/workspace/dashboard?workspaceId=${workspace._id || workspace.id}`)}
                 className="group bg-white/10 backdrop-blur-lg rounded-2xl p-8 cursor-pointer hover:bg-white/20 transition-all duration-500 transform hover:scale-105 hover:shadow-2xl border border-white/20 hover:border-white/30"
               >
                 <div className="flex items-start justify-between mb-6">
@@ -213,7 +217,7 @@ if (loading) {
               onClick={(e) => {
                 e.stopPropagation();
                 if (confirm(`Are you sure you want to delete workspace "${workspace.name}"?`)) {
-                  deleteWorkspace(workspace.id);
+                  deleteWorkspace(workspace._id || workspace.id || '');
                 }
               }}
               className="ml-2 text-red-500 hover:text-red-700 focus:outline-none"
@@ -229,7 +233,7 @@ if (loading) {
                 const newName = prompt('Enter new workspace name:', workspace.name);
                 const newDescription = prompt('Enter new workspace description:', workspace.description || '');
                 if (newName && newName.trim() !== '' && (newName !== workspace.name || (newDescription !== null && newDescription !== (workspace.description || '')))) {
-                  renameWorkspace(workspace.id, newName.trim(), newDescription || '');
+                  renameWorkspace(workspace._id || workspace.id || '', newName.trim(), newDescription || '');
                 }
               }}
               className="ml-2 text-blue-500 hover:text-blue-700 focus:outline-none"
@@ -273,8 +277,9 @@ if (loading) {
         {/* Action Buttons */}
         <div className="text-center space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {/* Create New Workspace Card */}
             <Link
-              href="/workspace/create"
+              href={`/workspace/create${orgId ? '?orgId=' + orgId : ''}`}
               className="inline-flex items-center gap-3 bg-gradient-to-r from-green-600 to-teal-600 text-white px-10 py-5 rounded-2xl font-semibold hover:from-green-700 hover:to-teal-700 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-105 text-lg"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -330,4 +335,16 @@ async function renameWorkspace(workspaceId: string, newName: string, newDescript
   } catch (error) {
     alert('An error occurred while updating the workspace.');
   }
+}
+
+export default function WorkspaceSelectionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    }>
+      <WorkspaceSelectionContent />
+    </Suspense>
+  );
 }

@@ -13,6 +13,7 @@ const QUICK_SUGGESTIONS = [
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [question, setQuestion] = useState("");
+  const [userName, setUserName] = useState("You");
   const [messages, setMessages] = useState<
     { sender: "user" | "bot"; text: string }[]
   >([
@@ -23,6 +24,25 @@ const Chatbot: React.FC = () => {
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch('/api/user/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data && data.name) {
+          setUserName(data.name);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchUser();
+  }, []);
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
@@ -178,6 +198,9 @@ const Chatbot: React.FC = () => {
                     lineHeight: "1.5",
                   }}
                 >
+                  <div style={{ fontSize: "11px", fontWeight: "bold", opacity: 0.8, marginBottom: "2px" }}>
+                    {msg.sender === "user" ? userName : "Task Assistant"}
+                  </div>
                   {msg.text}
                 </span>
               </div>

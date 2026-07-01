@@ -6,7 +6,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const authHeader = request.headers.get('authorization');
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/task/${taskId}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/tasks/${taskId}`, {
       method: 'GET',
       headers: {
         ...(authHeader && { 'Authorization': authHeader }),
@@ -17,6 +17,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     if (!res.ok) {
       return NextResponse.json({ message: data.message || 'Failed to get task' }, { status: res.status });
+    }
+
+    if (data.task) {
+      data.task.status = data.task.status === 'In Progress' ? 'in-progress' : data.task.status?.toLowerCase() || 'todo';
     }
 
     return NextResponse.json(data);
@@ -32,13 +36,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const authHeader = request.headers.get('authorization');
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/task/${taskId}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...(authHeader && { 'Authorization': authHeader }),
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        ...body,
+        ...(body.status && {
+          status: body.status === 'in-progress' ? 'In Progress' : body.status.charAt(0).toUpperCase() + body.status.slice(1)
+        })
+      }),
     });
 
     const data = await res.json();
@@ -59,7 +68,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const authHeader = request.headers.get('authorization');
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/task/${taskId}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/tasks/${taskId}`, {
       method: 'DELETE',
       headers: {
         ...(authHeader && { 'Authorization': authHeader }),

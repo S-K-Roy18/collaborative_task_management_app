@@ -63,9 +63,9 @@ function CreateTaskPage() {
 
         if (data.success) {
           setMembers(data.workspace.members.map((member: any) => ({
-            id: member.id,
-            name: member.name,
-            email: member.email,
+            id: member.user?._id || member._id || Math.random().toString(),
+            name: member.user?.name || 'Unknown User',
+            email: member.user?.email || '',
           })));
         } else {
           setError('Failed to load workspace members');
@@ -152,6 +152,8 @@ function CreateTaskPage() {
         body: JSON.stringify({
           ...formData,
           workspaceId,
+          priority: formData.priority.charAt(0).toUpperCase() + formData.priority.slice(1),
+          status: formData.status === 'in-progress' ? 'In Progress' : formData.status.charAt(0).toUpperCase() + formData.status.slice(1),
           subtasks: formData.subtasks.filter(st => st.title.trim() !== ''),
           tags: formData.tags.filter(tag => tag.name.trim() !== ''),
         }),

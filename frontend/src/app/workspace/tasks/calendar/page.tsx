@@ -1,71 +1,40 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSocket } from '../../../../context/socketContext';
-
-export const dynamic = 'force-dynamic';
-
-interface Assignee {
-  _id: string;
-  name: string;
-  email: string;
-  avatar: string;
-}
-
-interface Tag {
-  name: string;
-  color: string;
-}
-
-interface Subtask {
-  title: string;
-  completed: boolean;
-}
+import Link from 'next/link';
+import { 
+  format, 
+  addMonths, 
+  subMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfWeek, 
+  endOfWeek, 
+  isSameMonth, 
+  isSameDay, 
+  addDays, 
+  parseISO
+} from 'date-fns';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 
 interface Task {
   _id: string;
   title: string;
-  description: string;
-  assignees: Assignee[];
   dueDate: string;
   priority: 'low' | 'medium' | 'high';
   status: 'todo' | 'in-progress' | 'done';
-  subtasks: Subtask[];
-  tags: Tag[];
 }
 
-function getPriorityColor(priority: string): string {
-  switch (priority) {
-    case 'high':
-      return 'text-red-600';
-    case 'medium':
-      return 'text-yellow-600';
-    case 'low':
-      return 'text-green-600';
-    default:
-      return 'text-gray-500';
-  }
-}
-
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getWeekDay(year: number, month: number, day: number): number {
-  return new Date(year, month, day).getDay();
-}
-
-function CalendarViewPage() {
+function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get('workspaceId');
-  const { socket } = useSocket();
 
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     if (!workspaceId) {
@@ -76,165 +45,197 @@ function CalendarViewPage() {
     const fetchTasks = async () => {
       try {
         const token = localStorage.getItem('token');
-        if (!token) {
-          router.push('/login');
-          return;
-        }
+        if (!token) return router.push('/login');
+
         const res = await fetch(`/api/task/workspace/${workspaceId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
+        
         if (data.success) {
           setTasks(data.tasks);
         } else {
           setError(data.message || 'Failed to load tasks');
         }
-      } catch {
+      } catch (err) {
         setError('An error occurred while fetching tasks');
       } finally {
         setLoading(false);
       }
     };
+
     fetchTasks();
   }, [workspaceId, router]);
 
-  // Real-time socket updates for tasks
-  useEffect(() => {
-    if (!socket || !workspaceId) return;
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
-    socket.emit('joinWorkspace', workspaceId);
+  const renderHeader = () => {
+    return (
+      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-indigo-100">
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-indigo-100 rounded-xl">
+            <CalendarIcon className="w-6 h-6 text-indigo-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800">
+            {format(currentMonth, 'MMMM yyyy')}
+          </h2>
+        </div>
+        <div className="flex space-x-2">
+          <button 
+            onClick={prevMonth}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+          >
+            <ChevronLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <button 
+            onClick={nextMonth}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+          >
+            <ChevronRight className="w-5 h-5 text-gray-600" />
+          </button>
+          <Link
+            href={`/workspace/dashboard?workspaceId=${workspaceId}`}
+            className="ml-4 px-4 py-2 bg-indigo-50 text-indigo-600 font-medium rounded-lg hover:bg-indigo-100 transition-colors flex items-center"
+          >
+            Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  };
 
-    const handleTaskCreated = (data: { task: Task }) => {
-      setTasks(prev => [data.task, ...prev]);
-    };
+  const renderDays = () => {
+    const dateFormat = "EEEE";
+    const days = [];
+    let startDate = startOfWeek(currentMonth);
 
-    const handleTaskUpdated = (data: { task: Task }) => {
-      setTasks(prevTasks =>
-        prevTasks.map(t => t._id === data.task._id ? data.task : t)
+    for (let i = 0; i < 7; i++) {
+      days.push(
+        <div className="flex-1 text-center py-3 font-semibold text-sm text-indigo-400 tracking-wider uppercase" key={i}>
+          {format(addDays(startDate, i), dateFormat)}
+        </div>
       );
-    };
+    }
+    return <div className="flex bg-indigo-50/50 rounded-t-2xl border-b border-indigo-100">{days}</div>;
+  };
 
-    const handleTaskDeleted = (data: { taskId: string }) => {
-      setTasks(prevTasks =>
-        prevTasks.filter(t => t._id !== data.taskId)
+  const getPriorityColor = (priority: string) => {
+    switch(priority?.toLowerCase()) {
+      case 'high': return 'bg-red-100 text-red-700 border-red-200';
+      case 'medium': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'low': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const renderCells = () => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(monthStart);
+    const startDate = startOfWeek(monthStart);
+    const endDate = endOfWeek(monthEnd);
+
+    const dateFormat = "d";
+    const rows = [];
+    let days = [];
+    let day = startDate;
+    let formattedDate = "";
+
+    while (day <= endDate) {
+      for (let i = 0; i < 7; i++) {
+        formattedDate = format(day, dateFormat);
+        const cloneDay = day;
+        
+        // Find tasks for this day
+        const dayTasks = tasks.filter(t => t.dueDate && isSameDay(parseISO(t.dueDate), cloneDay));
+
+        days.push(
+          <div
+            className={`min-h-[140px] flex-1 border-r border-b border-indigo-50 p-2 transition-all duration-200 ${
+              !isSameMonth(day, monthStart)
+                ? "bg-gray-50/50 text-gray-400"
+                : isSameDay(day, new Date()) 
+                  ? "bg-indigo-50/30 text-indigo-700" 
+                  : "bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+            key={day.toString()}
+          >
+            <div className="flex justify-between items-start mb-2">
+              <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-medium ${
+                isSameDay(day, new Date()) ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : ''
+              }`}>
+                {formattedDate}
+              </span>
+              {dayTasks.length > 0 && (
+                <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {dayTasks.length}
+                </span>
+              )}
+            </div>
+            
+            <div className="space-y-1.5 overflow-y-auto max-h-[90px] pr-1 custom-scrollbar">
+              {dayTasks.map(task => (
+                <div 
+                  key={task._id} 
+                  className={`text-xs p-1.5 rounded-md border truncate shadow-sm font-medium ${getPriorityColor(task.priority)} ${task.status === 'done' || task.status === 'Done' ? 'opacity-50 line-through' : ''}`}
+                  title={task.title}
+                >
+                  {task.title}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        day = addDays(day, 1);
+      }
+      rows.push(
+        <div className="flex w-full" key={day.toString()}>
+          {days}
+        </div>
       );
-    };
-
-    socket.on('taskCreated', handleTaskCreated);
-    socket.on('taskUpdated', handleTaskUpdated);
-    socket.on('taskDeleted', handleTaskDeleted);
-
-    return () => {
-      socket.off('taskCreated', handleTaskCreated);
-      socket.off('taskUpdated', handleTaskUpdated);
-      socket.off('taskDeleted', handleTaskDeleted);
-      socket.emit('leaveWorkspace', workspaceId);
-    };
-  }, [socket, workspaceId]);
+      days = [];
+    }
+    
+    return <div className="flex-col bg-white rounded-b-2xl border border-indigo-100 shadow-xl overflow-hidden">{rows}</div>;
+  };
 
   if (loading) {
-    return <div className="min-h-screen flex justify-center items-center text-xl">Loading Calendar View...</div>;
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-indigo-600 animate-pulse text-xl font-semibold">Loading Calendar...</div>;
   }
 
   if (error) {
-    return <div className="min-h-screen flex justify-center items-center text-red-600">{error}</div>;
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-600">{error}</div>;
   }
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getWeekDay(year, month, 1);
-
-  // Filter tasks for current month only and group by day
-  const tasksByDay: Record<number, Task[]> = {};
-  tasks.forEach(task => {
-    if (!task.dueDate) {
-      return;
-    }
-    const taskDate = new Date(task.dueDate);
-    if (taskDate.getFullYear() === year && taskDate.getMonth() === month) {
-      const day = taskDate.getDate();
-      if (!tasksByDay[day]) {
-        tasksByDay[day] = [];
-      }
-      tasksByDay[day].push(task);
-    }
-  });
-
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
-  };
-
-  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
   return (
-    <div className="min-h-screen p-8 bg-gradient-to-br from-indigo-50 to-purple-100">
-      <h1 className="text-4xl font-bold mb-8 text-indigo-900 text-center">Calendar View</h1>
-      <div className="max-w-6xl mx-auto bg-white shadow-lg rounded-lg p-6">
-        <div className="flex justify-between items-center mb-6">
-          <button onClick={prevMonth} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
-            Previous
-          </button>
-          <h2 className="text-xl font-semibold text-indigo-800">
-            {currentDate.toLocaleString('default', { month: 'long' })} {year}
-          </h2>
-          <button onClick={nextMonth} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
-            Next
-          </button>
-        </div>
-        <div className="grid grid-cols-7 gap-1 text-center font-semibold text-indigo-700">
-          {daysOfWeek.map(day => (
-            <div key={day} className="border-b border-indigo-300 pb-1">{day}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {[...Array(firstDay).keys()].map(day => (
-            <div key={`empty-prev-${day}`} className="h-24 border p-1 bg-gray-50"></div>
-          ))}
-          {[...Array(daysInMonth).keys()].map(i => {
-            const day = i + 1;
-            const dayTasks = tasksByDay[day] || [];
-            return (
-              <div key={day} className="border min-h-[100px] p-2 bg-gray-50 rounded relative overflow-auto">
-                <div className="text-indigo-800 font-semibold mb-1">{day}</div>
-                {dayTasks.map(task => (
-                  <div key={task._id} className="mb-1 p-1 rounded-md bg-indigo-100 hover:bg-indigo-200 cursor-pointer">
-                    <div className="flex justify-between items-center text-xs font-semibold text-indigo-900">
-                      <span>{task.title}</span>
-                      <span className={getPriorityColor(task.priority)}>{task.priority}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {task.tags.map((tag, idx) => (
-                        <span key={idx} className="text-xs font-semibold rounded px-1 text-white" style={{ backgroundColor: tag.color }}>
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50/50 p-8">
+      <div className="max-w-7xl mx-auto">
+        {renderHeader()}
+        <div className="shadow-2xl shadow-indigo-100/50 rounded-2xl">
+          {renderDays()}
+          {renderCells()}
         </div>
       </div>
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
+          border-radius: 20px;
+        }
+      `}} />
     </div>
   );
 }
 
-export default function CalendarViewPageWrapper() {
+export default function CalendarPageWrapper() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex justify-center items-center text-xl animate-pulse">
-        Loading Calendar...
-      </div>
-    }>
-      <CalendarViewPage />
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50 text-xl">Loading...</div>}>
+      <CalendarPage />
     </Suspense>
   );
 }

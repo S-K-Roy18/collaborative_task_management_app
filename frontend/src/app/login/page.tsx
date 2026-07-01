@@ -30,16 +30,23 @@ export default function Login() {
           password: formData.password,
         }),
       });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error('Server returned an invalid response (not JSON)');
+      }
+
       if (res.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userId', data.user.id);
-        router.push('/workspace');
+        localStorage.setItem('token', data.accessToken);
+        localStorage.setItem('userId', data.user._id);
+        router.push('/organization');
       } else {
         setError(data.message || 'Login failed');
       }
-    } catch (err) {
-      setError('An error occurred during login');
+    } catch (err: any) {
+      console.error("Login Exception:", err);
+      setError(err.message || 'An error occurred during login');
     }
   };
 

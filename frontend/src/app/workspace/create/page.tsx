@@ -10,11 +10,18 @@ export default function WorkspaceCreatePage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const orgId = searchParams?.get('orgId') || '';
+
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     if (!name.trim()) {
       setError('Workspace name is required');
+      return;
+    }
+    if (!orgId) {
+      setError('Organization ID is missing');
       return;
     }
     setLoading(true);
@@ -26,7 +33,7 @@ export default function WorkspaceCreatePage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`, // add Authorization header
         },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, organizationId: orgId }),
       });
       const data = await res.json();
       if (data.success) {

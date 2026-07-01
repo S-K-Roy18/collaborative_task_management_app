@@ -4,6 +4,7 @@ import NotificationsDropdown from '@/components/NotificationsDropdown';
 
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { TaskCharts } from '@/components/TaskCharts';
 import { useSearchParams } from 'next/navigation';
 
 interface Workspace {
@@ -32,7 +33,7 @@ interface TaskStats {
 
 interface Project {
   _id: string;
-  title: string;
+  name: string;
   description: string;
   status: 'Planning' | 'Active' | 'On Hold' | 'Completed' | 'Cancelled';
   priority: 'low' | 'medium' | 'high';
@@ -58,6 +59,7 @@ function WorkspaceDashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
   const [risks, setRisks] = useState<RiskInsight[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
   const [loadingRisks, setLoadingRisks] = useState(false);
   const [riskError, setRiskError] = useState('');
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
@@ -85,12 +87,24 @@ function WorkspaceDashboardPage() {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          cache: 'no-store',
         });
         const data = await res.json();
         if (data.success) {
-          setWorkspace(data.workspace);
+          const mappedWorkspace = {
+            ...data.workspace,
+            members: data.workspace.members.map((m: any) => ({
+              id: m.user._id || m._id,
+              name: m.user.name || 'Unknown User',
+              email: m.user.email || '',
+              avatar: m.user.profilePicture || '',
+              role: m.role || 'Member',
+              joinedAt: m.joinedAt || new Date().toISOString()
+            }))
+          };
+          setWorkspace(mappedWorkspace);
         } else {
-          setError(data.message || 'Failed to load workspace');
+          setError(data.error || data.message || 'Failed to load workspace');
         }
       } catch (err) {
         setError('An error occurred while fetching workspace');
@@ -107,13 +121,14 @@ function WorkspaceDashboardPage() {
         const data = await res.json();
         if (data.success) {
           const tasks = data.tasks;
+          setAllTasks(tasks);
           const now = new Date();
           const stats: TaskStats = {
             total: tasks.length,
-            todo: tasks.filter((t: any) => t.status === 'todo').length,
-            inProgress: tasks.filter((t: any) => t.status === 'in-progress').length,
-            done: tasks.filter((t: any) => t.status === 'done').length,
-            overdue: tasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'done').length,
+            todo: tasks.filter((t: any) => t.status === 'todo' || t.status === 'Todo').length,
+            inProgress: tasks.filter((t: any) => t.status === 'in-progress' || t.status === 'In Progress').length,
+            done: tasks.filter((t: any) => t.status === 'done' || t.status === 'Done').length,
+            overdue: tasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'done' && t.status !== 'Done').length,
           };
           setTaskStats(stats);
         }
@@ -187,17 +202,17 @@ function WorkspaceDashboardPage() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title: newProjectTitle.trim(),
+          name: newProjectTitle.trim(),
           description: newProjectDesc.trim(),
-          workspaceId,
-          priority: newProjectPriority,
-          budget: newProjectBudget,
+          workspace: workspaceId,
+          priority: newProjectPriority.charAt(0).toUpperCase() + newProjectPriority.slice(1),
+          budget: newProjectBudget ? Number(newProjectBudget) : undefined,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setProjects([data.project, ...projects]);
+        setProjects([data.data, ...projects]);
         setNewProjectTitle('');
         setNewProjectDesc('');
         setNewProjectPriority('medium');
@@ -289,7 +304,24 @@ function WorkspaceDashboardPage() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-red-800 mb-2">Error</h2>
-          <p className="text-red-600">{error}</p>
+          <p className="text-red-600 mb-6">{error}</p>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={() => window.location.href = '/organization'}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
+            >
+              Back to Organizations
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+              }}
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium transition-colors"
+            >
+              Log Out
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -344,28 +376,36 @@ function WorkspaceDashboardPage() {
               <span className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full text-sm font-semibold shadow-md">
                 {workspace.userRole}
               </span>
+              <div className="border-l border-emerald-200 h-8 mx-2"></div>
+              <NotificationsDropdown />
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Welcome Section */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-200 to-teal-200 rounded-full -translate-y-16 translate-x-16 opacity-20"></div>
-              <div className="relative z-10">
-                <div className="flex items-center space-x-4 mb-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center">
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Welcome to your Workspace!</h2>
-                    <p className="text-emerald-600">Manage tasks, collaborate with your team, and boost productivity</p>
+        {(() => {
+          const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+          const currentUser = workspace.members.find(m => m.id === currentUserId);
+          const userName = currentUser ? currentUser.name : 'User';
+          
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Main Content */}
+              <div className="lg:col-span-2 space-y-8">
+                {/* Welcome Section */}
+                <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-200 to-teal-200 rounded-full -translate-y-16 translate-x-16 opacity-20"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center space-x-4 mb-6">
+                      <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Welcome to your Workspace, {userName}!</h2>
+                        <p className="text-emerald-600">Manage tasks, collaborate with your team, and boost productivity</p>
                   </div>
                 </div>
               </div>
@@ -462,6 +502,40 @@ function WorkspaceDashboardPage() {
                     <div>
                       <h3 className="font-bold">Chat</h3>
                       <p className="text-white/80 text-xs">Real-time</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/workspace/analytics?workspaceId=${workspaceId}`}
+                  className="group p-4 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-2xl text-white hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold">Analytics</h3>
+                      <p className="text-white/80 text-xs">Reports</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  href={`/workspace/integrations?workspaceId=${workspaceId}`}
+                  className="group p-4 bg-gradient-to-r from-gray-700 via-gray-800 to-gray-900 rounded-2xl text-white hover:from-gray-800 hover:via-gray-900 hover:to-black transition-all duration-300 transform hover:scale-105 hover:shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -translate-y-6 translate-x-6"></div>
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold">Integrations</h3>
+                      <p className="text-white/80 text-xs">Apps & APIs</p>
                     </div>
                   </div>
                 </Link>
@@ -602,6 +676,8 @@ function WorkspaceDashboardPage() {
               )}
             </div>
 
+            <TaskCharts tasks={allTasks} />
+
             {/* Projects Section */}
             <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8 mt-8">
               <div className="flex justify-between items-center mb-6">
@@ -680,7 +756,7 @@ function WorkspaceDashboardPage() {
                   <div key={project._id} className="p-5 bg-gradient-to-r from-gray-50 to-emerald-50 rounded-2xl border border-emerald-100/50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center hover:shadow-md transition">
                     <div className="flex-1 min-w-0 pr-4">
                       <div className="flex flex-wrap gap-2 items-center mb-1">
-                        <h3 className="font-bold text-lg text-gray-900 truncate">{project.title}</h3>
+                        <h3 className="font-bold text-lg text-gray-900 truncate">{project.name}</h3>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${
                           project.priority === 'high' ? 'bg-red-500' : project.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                         }`}>
@@ -818,12 +894,20 @@ function WorkspaceDashboardPage() {
           <div className="space-y-8">
             {/* Members */}
             <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-emerald-200/50 p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                <svg className="w-6 h-6 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                </svg>
-                Team Members ({workspace.members.length})
-              </h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <svg className="w-6 h-6 mr-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  Team Members ({workspace.members.length})
+                </h2>
+                <Link
+                  href={`/workspace/members?workspaceId=${workspaceId}`}
+                  className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  Manage
+                </Link>
+              </div>
               <div className="space-y-4">
                 {workspace.members.map((member) => (
                   <div key={member.id} className="flex items-center space-x-4 p-4 bg-gradient-to-r from-gray-50 to-emerald-50 rounded-2xl hover:from-emerald-50 hover:to-teal-50 transition-all duration-300 border border-emerald-100/50">
@@ -909,6 +993,8 @@ function WorkspaceDashboardPage() {
             </div>
           </div>
         </div>
+        );
+        })()}
       </main>
     </div>
   );

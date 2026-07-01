@@ -14,11 +14,11 @@ function getAuthHeader(request: NextRequest): Record<string, string> {
   return authHeader ? { Authorization: authHeader } : {};
 }
 
-// POST /api/organization  →  backend POST /api/organization  (Create organization)
+// POST /api/organization  →  backend POST /api/organizations  (Create organization)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const res = await fetch(`${BACKEND}/api/organization`, {
+    const res = await fetch(`${BACKEND}/api/organizations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader(request) },
       body: JSON.stringify(body),
@@ -31,11 +31,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/organization  →  backend GET /api/organization  (if ever needed)
+// GET /api/organization  →  backend GET /api/organizations  (if ever needed)
 export async function GET(request: NextRequest) {
   try {
     const search = request.nextUrl.search;
-    const res = await fetch(`${BACKEND}/api/organization${search}`, {
+    const res = await fetch(`${BACKEND}/api/organizations${search}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader(request) },
     });

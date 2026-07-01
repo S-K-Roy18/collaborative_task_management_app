@@ -99,13 +99,19 @@ function KanbanBoardPage() {
 
     socket.emit('joinWorkspace', workspaceId);
 
+    const normalizeStatus = (task: Task) => {
+      let normalized = task.status?.toLowerCase() || 'todo';
+      if (normalized === 'in progress') normalized = 'in-progress';
+      return { ...task, status: normalized as any };
+    };
+
     const handleTaskCreated = (data: { task: Task }) => {
-      setTasks(prev => [data.task, ...prev]);
+      setTasks(prev => [normalizeStatus(data.task), ...prev]);
     };
 
     const handleTaskUpdated = (data: { task: Task }) => {
       setTasks(prevTasks =>
-        prevTasks.map(t => t._id === data.task._id ? data.task : t)
+        prevTasks.map(t => t._id === data.task._id ? normalizeStatus(data.task) : t)
       );
     };
 
@@ -207,12 +213,13 @@ function KanbanBoardPage() {
                 key={task._id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, task._id)}
-                className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg mb-4 p-4 cursor-grab shadow hover:shadow-lg transition-shadow duration-200"
+                onClick={() => router.push(`/workspace/tasks/${task._id}?workspaceId=${workspaceId}`)}
+                className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg mb-4 p-4 cursor-pointer shadow hover:shadow-lg transition-shadow duration-200"
               >
                 <h3 className="font-semibold mb-1 text-indigo-800">{task.title}</h3>
                 <p className="text-sm text-indigo-600 mb-2 line-clamp-2">{task.description}</p>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {task.tags.map((tag, i) => (
+                  {(task.tags || []).map((tag, i) => (
                     <span key={i} className="px-3 py-1 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: tag.color }}>
                       {tag.name}
                     </span>

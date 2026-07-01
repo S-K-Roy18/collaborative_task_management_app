@@ -21,7 +21,7 @@ export async function GET(
   try {
     const { path } = await params;
     const search = request.nextUrl.search;
-    const url = `${BACKEND}/api/project/${path.join('/')}${search}`;
+    const url = `${BACKEND}/api/projects/${path.join('/')}${search}`;
     const res = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader(request) },
@@ -40,7 +40,7 @@ export async function POST(
 ) {
   try {
     const { path } = await params;
-    const url = `${BACKEND}/api/project/${path.join('/')}`;
+    const url = `${BACKEND}/api/projects/${path.join('/')}`;
     const body = await request.json().catch(() => ({}));
     const res = await fetch(url, {
       method: 'POST',
@@ -61,7 +61,7 @@ export async function PUT(
 ) {
   try {
     const { path } = await params;
-    const url = `${BACKEND}/api/project/${path.join('/')}`;
+    const url = `${BACKEND}/api/projects/${path.join('/')}`;
     const body = await request.json().catch(() => ({}));
     const res = await fetch(url, {
       method: 'PUT',
@@ -82,7 +82,7 @@ export async function DELETE(
 ) {
   try {
     const { path } = await params;
-    const url = `${BACKEND}/api/project/${path.join('/')}`;
+    const url = `${BACKEND}/api/projects/${path.join('/')}`;
     const res = await fetch(url, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader(request) },
