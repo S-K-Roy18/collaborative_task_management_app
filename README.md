@@ -41,8 +41,8 @@ A real-time, multi-tenant collaborative project and task management SaaS platfor
 
 ## 🛠️ Technology Stack
 
-*   **Frontend**: Next.js 15, React 19, Tailwind CSS, TypeScript, Socket.io Client
-*   **Backend**: Node.js, Express.js, Socket.io, Mongoose (MongoDB Atlas), Google Generative AI (Gemini SDK), Cloudinary SDK
+*   **Frontend**: Next.js 15.5, React 19, Tailwind CSS v4, TypeScript, Zustand, Socket.io Client, Radix UI, Recharts, Framer Motion, Hello-Pangea DND, Next-Auth, Simple-Peer
+*   **Backend**: Node.js, Express.js, Socket.io, Mongoose (MongoDB Atlas), Google Generative AI (Gemini SDK), Cloudinary SDK, Winston, Joi, JSONWebToken, Multer, Nodemailer, Bcryptjs
 *   **Testing**: Jest, Supertest
 
 ---
